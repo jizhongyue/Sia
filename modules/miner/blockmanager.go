@@ -3,6 +3,8 @@ package miner
 import (
 	"errors"
 	"time"
+	"bytes"
+	"fmt"
 
 	"github.com/NebulousLabs/Sia/crypto"
 	"github.com/NebulousLabs/Sia/modules"
@@ -13,6 +15,130 @@ import (
 var (
 	errLateHeader = errors.New("header is old, block could not be recovered")
 )
+
+// GetBlockTemplate returns a block that is ready for nonce grinding, along with
+// the root hash of the block.
+func (m *Miner) GetBlockTemplate() (bt types.BlockTemplate, err error) {
+	// Check if the wallet is unlocked. If the wallet is unlocked, make sure
+	// that the miner has a recent address.
+	unlocked, err := m.wallet.Unlocked()
+	if err != nil {
+		return types.BlockTemplate{}, err
+	}
+	if !unlocked {
+		err = modules.ErrLockedWallet
+		return types.BlockTemplate{}, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	err = m.checkAddress()
+	if err != nil {
+		return types.BlockTemplate{}, err
+	}
+
+	b := m.blockForGbt()
+	bt.ParentID    = b.ParentID
+	bt.Nonce       = fmt.Sprintf("%x", b.Nonce)
+	bt.Timestamp   = b.Timestamp
+	bt.Coinbase    = b.CalculateSubsidy(m.persist.Height)
+	bt.Target      = fmt.Sprintf("%x", m.persist.Target)
+	bt.NonceRange  = string("00000000ffffffff")
+	bt.SizeLimit   = uint64(2e6)
+	bt.Height      = m.persist.Height
+
+	tree := crypto.NewTree()
+	var buf bytes.Buffer
+	// e := types.encoder(&buf)
+	// tree.SetIndex(0)
+	tree.SetIndex(uint64(len(b.MinerPayouts) + len(b.Transactions) - 1))
+	for _, payout := range b.MinerPayouts {
+		payout.MarshalSia(&buf)
+		tree.Push(buf.Bytes())
+
+		var leaf types.MerkleLeaf
+		leaf.Data = buf.Bytes()
+		bt.MinerPayouts = append(bt.MinerPayouts, leaf)
+		buf.Reset()
+	}
+	for _, txn := range b.Transactions {
+		txn.MarshalSia(&buf)
+		tree.Push(buf.Bytes())
+
+		var leaf types.MerkleLeaf
+		leaf.Data = buf.Bytes()
+		bt.Transactions = append(bt.Transactions, leaf)
+		buf.Reset()
+	}
+
+	_, proofSet, _, _ := tree.Prove()
+
+	// convert proofSet to base and hashSet
+	hashSet := make([]crypto.Hash, len(proofSet)-1)
+	for i, proof := range proofSet[1:] {
+		copy(hashSet[i][:], proof)
+	}
+
+	bt.ProofSet     = proofSet
+	bt.MerkleBranch = hashSet
+
+	return bt, nil
+}
+
+// BlockForWork returns a block that is ready for nonce grinding, along with
+// the root hash of the block.
+func (m *Miner) BlockForWork() (b types.Block, t types.Target, h types.BlockHeight, err error) {
+	// Check if the wallet is unlocked. If the wallet is unlocked, make sure
+	// that the miner has a recent address.
+	unlocked, err := m.wallet.Unlocked()
+	if err != nil {
+		return types.Block{}, types.Target{}, m.persist.Height, err
+	}
+	if !unlocked {
+		err = modules.ErrLockedWallet
+		return types.Block{}, types.Target{}, m.persist.Height, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	err = m.checkAddress()
+	if err != nil {
+		return types.Block{}, types.Target{}, m.persist.Height, err
+	}
+
+	b = m.blockForWork()
+	return b, m.persist.Target, m.persist.Height, nil
+}
+
+// blockForGbt returns a block that is ready for nonce grinding, including
+// correct miner payouts and a random transaction to prevent collisions and
+// overlapping work with other blocks being mined in parallel or for different
+// forks (during testing).
+func (m *Miner) blockForGbt() types.Block {
+	b := m.persist.UnsolvedBlock
+
+	// Update the timestamp.
+	if b.Timestamp < types.CurrentTimestamp() {
+		b.Timestamp = types.CurrentTimestamp()
+	}
+
+	// Update the address + payouts.
+	err := m.checkAddress()
+	if err != nil {
+		m.log.Println(err)
+	}
+	b.MinerPayouts = []types.SiacoinOutput{{
+		Value:      b.CalculateSubsidy(m.persist.Height + 1),
+		UnlockHash: m.persist.Address,
+	}}
+
+	// Add an arb-data txn to the block to create a unique merkle root.
+	randBytes := fastrand.Bytes(types.SpecifierLen)
+	randTxn := types.Transaction{
+		ArbitraryData: [][]byte{append(modules.PrefixNonSia[:], randBytes...)},
+	}
+	b.Transactions = append(b.Transactions, randTxn)
+
+	return b
+}
 
 // blockForWork returns a block that is ready for nonce grinding, including
 // correct miner payouts and a random transaction to prevent collisions and
@@ -71,9 +197,9 @@ func (m *Miner) newSourceBlock() {
 // 'HeaderMemory', 'BlockMemory', and 'MaxSourceBlockAge'. On the full network,
 // it is typically safe to assume that headers will be remembered for
 // min(10 minutes, 10e3 requests).
-func (m *Miner) HeaderForWork() (types.BlockHeader, types.Target, error) {
+func (m *Miner) HeaderForWork() (types.BlockHeader, types.Target, types.BlockHeight, error) {
 	if err := m.tg.Add(); err != nil {
-		return types.BlockHeader{}, types.Target{}, err
+		return types.BlockHeader{}, types.Target{}, m.persist.Height, err
 	}
 	defer m.tg.Done()
 
@@ -83,17 +209,17 @@ func (m *Miner) HeaderForWork() (types.BlockHeader, types.Target, error) {
 	// Return a blank header with an error if the wallet is locked.
 	unlocked, err := m.wallet.Unlocked()
 	if err != nil {
-		return types.BlockHeader{}, types.Target{}, err
+		return types.BlockHeader{}, types.Target{}, m.persist.Height, err
 	}
 	if !unlocked {
-		return types.BlockHeader{}, types.Target{}, modules.ErrLockedWallet
+		return types.BlockHeader{}, types.Target{}, m.persist.Height, modules.ErrLockedWallet
 	}
 
 	// Check that the wallet has been initialized, and that the miner has
 	// successfully fetched an address.
 	err = m.checkAddress()
 	if err != nil {
-		return types.BlockHeader{}, types.Target{}, err
+		return types.BlockHeader{}, types.Target{}, m.persist.Height, err
 	}
 
 	// If too much time has elapsed since the last source block, get a new one.
@@ -125,7 +251,7 @@ func (m *Miner) HeaderForWork() (types.BlockHeader, types.Target, error) {
 	}
 
 	// Return the header and target.
-	return header, m.persist.Target, nil
+	return header, m.persist.Target, m.persist.Height, nil
 }
 
 // managedSubmitBlock takes a solved block and submits it to the blockchain.
@@ -200,6 +326,34 @@ func (m *Miner) SubmitHeader(bh types.BlockHeader) error {
 
 		// Sanity check - block should have same id as header.
 		bh.Nonce = nonce
+		if types.BlockID(crypto.HashObject(bh)) != b.ID() {
+			m.log.Critical("block reconstruction failed")
+		}
+		return nil
+	}()
+	if err != nil {
+		m.log.Println("ERROR during call to SubmitHeader, pre SubmitBlock:", err)
+		return err
+	}
+	err = m.managedSubmitBlock(b)
+	if err != nil {
+		m.log.Println("ERROR returned by managedSubmitBlock:", err)
+		return err
+	}
+	return nil
+}
+
+// SubmitBlock takes a solved block and submits it to the blockchain.
+func (m *Miner) SubmitBlock(b types.Block, bh types.BlockHeader) error {
+	if err := m.tg.Add(); err != nil {
+		return err
+	}
+	defer m.tg.Done()
+
+	err := func() error {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+
 		if types.BlockID(crypto.HashObject(bh)) != b.ID() {
 			m.log.Critical("block reconstruction failed")
 		}

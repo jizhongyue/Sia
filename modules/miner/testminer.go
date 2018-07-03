@@ -44,29 +44,29 @@ func solveBlock(b types.Block, target types.Target) (types.Block, bool) {
 	return b, false
 }
 
-// BlockForWork returns a block that is ready for nonce grinding, along with
-// the root hash of the block.
-func (m *Miner) BlockForWork() (b types.Block, t types.Target, err error) {
-	// Check if the wallet is unlocked. If the wallet is unlocked, make sure
-	// that the miner has a recent address.
-	unlocked, err := m.wallet.Unlocked()
-	if err != nil {
-		return types.Block{}, types.Target{}, err
-	}
-	if !unlocked {
-		err = modules.ErrLockedWallet
-		return
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	err = m.checkAddress()
-	if err != nil {
-		return
-	}
+// // BlockForWork returns a block that is ready for nonce grinding, along with
+// // the root hash of the block.
+// func (m *Miner) BlockForWork() (b types.Block, t types.Target, err error) {
+// 	// Check if the wallet is unlocked. If the wallet is unlocked, make sure
+// 	// that the miner has a recent address.
+// 	unlocked, err := m.wallet.Unlocked()
+// 	if err != nil {
+// 		return types.Block{}, types.Target{}, err
+// 	}
+// 	if !unlocked {
+// 		err = modules.ErrLockedWallet
+// 		return
+// 	}
+// 	m.mu.Lock()
+// 	defer m.mu.Unlock()
+// 	err = m.checkAddress()
+// 	if err != nil {
+// 		return
+// 	}
 
-	b = m.blockForWork()
-	return b, m.persist.Target, nil
-}
+// 	b = m.blockForWork()
+// 	return b, m.persist.Target, nil
+// }
 
 // AddBlock adds a block to the consensus set.
 func (m *Miner) AddBlock() (types.Block, error) {

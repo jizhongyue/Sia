@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"bytes"
 
 	"github.com/NebulousLabs/Sia/crypto"
 	"github.com/NebulousLabs/Sia/types"
@@ -36,6 +37,19 @@ type ConsensusBlocksGet struct {
 	Timestamp    types.Timestamp         `json:"timestamp"`
 	MinerPayouts []types.SiacoinOutput   `json:"minerpayouts"`
 	Transactions []ConsensusBlocksGetTxn `json:"transactions"`
+}
+
+type ConsensusMerkleGet struct {
+	ID           types.BlockID           `json:"id"`
+	Txn0         types.Transaction       `json:"txn0"`
+	TxnF1        types.Transaction       `json:"txnF1"`
+	Height       types.BlockHeight       `json:"height"`
+	ParentID     types.BlockID           `json:"parentid"`
+	Nonce        types.BlockNonce        `json:"nonce"`
+	Timestamp    types.Timestamp         `json:"timestamp"`
+	MerkleRoot   crypto.Hash             `json:"merkleroot"`
+	ProofSet      [][]byte           `json:proofset`
+	MerkleBranch  []crypto.Hash      `json:merklebranch`
 }
 
 // ConsensusBlocksGetTxn contains all fields of a types.Transaction and an
@@ -221,6 +235,88 @@ func (api *API) consensusBlocksHandler(w http.ResponseWriter, req *http.Request,
 	}
 	// Write response
 	WriteJSON(w, consensusBlocksGetFromBlock(b, h))
+}
+
+// consensusMerkleRootHandler handles the API calls to /consensus/merkle
+// endpoint.
+func (api *API) consensusMerkleRootHandler(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+	// Get query params and check them.
+	id, height := req.FormValue("id"), req.FormValue("height")
+	if id != "" && height != "" {
+		WriteError(w, Error{"can't specify both id and height"}, http.StatusBadRequest)
+	}
+	if id == "" && height == "" {
+		WriteError(w, Error{"either id or height has to be provided"}, http.StatusBadRequest)
+	}
+
+	var b types.Block
+	var h types.BlockHeight
+	var exists bool
+
+	// Handle request by id
+	if id != "" {
+		var bid types.BlockID
+		if err := bid.LoadString(id); err != nil {
+			WriteError(w, Error{"failed to unmarshal blockid"}, http.StatusBadRequest)
+			return
+		}
+		b, h, exists = api.cs.BlockByID(bid)
+	}
+	// Handle request by height
+	if height != "" {
+		if _, err := fmt.Sscan(height, &h); err != nil {
+			WriteError(w, Error{"failed to parse block height"}, http.StatusBadRequest)
+			return
+		}
+		b, exists = api.cs.BlockAtHeight(types.BlockHeight(h))
+	}
+	// Check if block was found
+	if !exists {
+		WriteError(w, Error{"block doesn't exist"}, http.StatusBadRequest)
+		return
+	}
+
+	// TODO: something about building my merkle root.
+	// 2018-06-14.
+	// yuejizhong.
+	tree := crypto.NewTree()
+	var buf bytes.Buffer
+	// e := types.encoder(&buf)
+	// tree.SetIndex(0)
+	tree.SetIndex(uint64(len(b.MinerPayouts) + len(b.Transactions) - 1))
+	for _, payout := range b.MinerPayouts {
+		payout.MarshalSia(&buf)
+		tree.Push(buf.Bytes())
+		buf.Reset()
+	}
+	for _, txn := range b.Transactions {
+		txn.MarshalSia(&buf)
+		tree.Push(buf.Bytes())
+		buf.Reset()
+	}
+
+	_, proofSet, _, _ := tree.Prove()
+
+	hashSet := make([]crypto.Hash, len(proofSet)-1)
+	for i, proof := range proofSet[1:] {
+		copy(hashSet[i][:], proof)
+	}
+
+	cm := ConsensusMerkleGet {
+		ID:            b.ID(),
+		Height:        h,
+		ParentID:      b.ParentID,
+		Nonce:         b.Nonce,
+		Timestamp:     b.Timestamp,
+		MerkleRoot:    b.MerkleRoot(),
+		Txn0:          b.Transactions[0],
+		TxnF1:         b.Transactions[len(b.Transactions)-1],
+		ProofSet:      proofSet,
+		MerkleBranch:  hashSet,
+	}
+
+	// Write response
+	WriteJSON(w, cm)
 }
 
 // consensusValidateTransactionsetHandler handles the API calls to

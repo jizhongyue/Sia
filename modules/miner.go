@@ -18,11 +18,21 @@ type BlockManager interface {
 	// HeaderForWork returns a block header that can be grinded on and
 	// resubmitted to the miner. HeaderForWork() will remember the block that
 	// corresponds to the header for 50 calls.
-	HeaderForWork() (types.BlockHeader, types.Target, error)
+	HeaderForWork() (types.BlockHeader, types.Target, types.BlockHeight, error)
+
+	// BlockForWork returns a block that is ready for nonce grinding. All
+	// blocks returned by BlockForWork have a unique Merkle root, meaning that
+	// each can safely start from nonce 0.
+	BlockForWork() (types.Block, types.Target, types.BlockHeight, error)
+
+	GetBlockTemplate() (bt types.BlockTemplate, err error)
 
 	// SubmitHeader takes a block header that has been worked on and has a
 	// valid target.
 	SubmitHeader(types.BlockHeader) error
+
+	// SubmitBlock takes a block and submits it to the blockchain.
+	SubmitBlock(b types.Block, bh types.BlockHeader) error
 
 	// BlocksMined returns the number of blocks and stale blocks that have been
 	// mined using this miner.
@@ -55,7 +65,7 @@ type TestMiner interface {
 	// BlockForWork returns a block that is ready for nonce grinding. All
 	// blocks returned by BlockForWork have a unique Merkle root, meaning that
 	// each can safely start from nonce 0.
-	BlockForWork() (types.Block, types.Target, error)
+	// BlockForWork() (types.Block, types.Target, error)
 
 	// FindBlock will have the miner make 1 attempt to find a solved block that
 	// builds on the current consensus set. It will give up after a few

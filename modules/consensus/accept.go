@@ -9,6 +9,7 @@ import (
 
 	"github.com/NebulousLabs/Sia/modules"
 	"github.com/NebulousLabs/Sia/types"
+	"github.com/NebulousLabs/Sia/build"
 
 	"github.com/coreos/bbolt"
 )
@@ -20,6 +21,22 @@ var (
 	errNonLinearChain  = errors.New("block set is not a contiguous chain")
 	errOrphan          = errors.New("block has no known parent")
 )
+
+func touch(file string) error {
+    if _, err := os.Stat(file); os.IsNotExist(err) {
+        f, err := os.OpenFile(file, os.O_RDWR|os.O_CREATE, 0666)
+        if err != nil {
+            return err
+        }
+        defer f.Close()
+    }
+
+    t := time.Now()
+    if err := os.Chtimes(file, t, t); err != nil {
+		return err
+    }
+    return nil
+}
 
 // managedBroadcastBlock will broadcast a block to the consensus set's peers.
 func (cs *ConsensusSet) managedBroadcastBlock(b types.Block) {
@@ -306,6 +323,18 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 	if !chainExtended {
 		return false, modules.ErrNonExtendingBlock
 	}
+
+	// do notification to Gbtmaker.
+	if build.Release == "dev" {
+		touch("/root/.sia/dev/block_notify_file")
+		cs.log.Println("touch /root/.sia/dev/block_notify_file.")
+	} else if build.Release == "standard" {
+		touch("/root/.sia/block_notify_file")
+	} else if build.Release == "testing" {
+		touch("/root/.sia/testnet/block_notify_file")
+		cs.log.Println("touch /root/.sia/testnet/block_notify_file.")
+	}
+
 	// Send any changes to subscribers.
 	for i := 0; i < len(changes); i++ {
 		cs.updateSubscribers(changes[i])

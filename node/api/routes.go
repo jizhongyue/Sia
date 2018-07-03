@@ -22,6 +22,7 @@ func (api *API) buildHTTPRoutes(requiredUserAgent string, requiredPassword strin
 	if api.cs != nil {
 		router.GET("/consensus", api.consensusHandler)
 		router.GET("/consensus/blocks", api.consensusBlocksHandler)
+		router.GET("/consensus/merkle", api.consensusMerkleRootHandler)
 		router.POST("/consensus/validate/transactionset", api.consensusValidateTransactionsetHandler)
 	}
 
@@ -59,6 +60,9 @@ func (api *API) buildHTTPRoutes(requiredUserAgent string, requiredPassword strin
 	// Miner API Calls
 	if api.miner != nil {
 		router.GET("/miner", api.minerHandler)
+		router.GET("/miner/gbt", RequirePassword(api.minerBlockTemplateGET, requiredPassword))
+		router.GET("/miner/block", RequirePassword(api.minerBlockHandlerGET, requiredPassword))
+		router.POST("/miner/block", RequirePassword(api.minerBlockHandlerPOST, requiredPassword))
 		router.GET("/miner/header", RequirePassword(api.minerHeaderHandlerGET, requiredPassword))
 		router.POST("/miner/header", RequirePassword(api.minerHeaderHandlerPOST, requiredPassword))
 		router.GET("/miner/start", RequirePassword(api.minerStartHandler, requiredPassword))
@@ -90,7 +94,6 @@ func (api *API) buildHTTPRoutes(requiredUserAgent string, requiredPassword strin
 		router.POST("/renter/upload/*siapath", RequirePassword(api.renterUploadHandler, requiredPassword))
 
 		// HostDB endpoints.
-		router.GET("/hostdb", api.hostdbHandler)
 		router.GET("/hostdb/active", api.hostdbActiveHandler)
 		router.GET("/hostdb/all", api.hostdbAllHandler)
 		router.GET("/hostdb/hosts/:pubkey", api.hostdbHostsHandler)

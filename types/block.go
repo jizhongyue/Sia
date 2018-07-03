@@ -52,6 +52,31 @@ type (
 	BlockNonce [8]byte
 )
 
+type (
+	// merkle tree Leaf for getblocktemplate
+	MerkleLeaf struct {
+		Data          []byte           `json:data`
+		Txid          []byte           `json:txid`
+		Hash          []byte           `json:hash`
+	}
+
+	// struct for getblocktemplate
+	BlockTemplate struct {
+		ParentID      BlockID            `json:parentid`
+		Nonce         string             `json:nonce`
+		Timestamp     Timestamp          `json:timestamp`
+		MinerPayouts  []MerkleLeaf       `json:payouts`
+		Transactions  []MerkleLeaf       `json:transaction`
+		ProofSet      [][]byte           `json:proofset`
+		MerkleBranch  []crypto.Hash      `json:merklebranch`
+		Coinbase      Currency           `json:coinbase`
+		Target        string             `json:target`
+		NonceRange    string             `json:noncerange`
+		SizeLimit     uint64             `json:sizelimit`
+		Height        BlockHeight        `json:height`
+	}
+)
+
 // CalculateCoinbase calculates the coinbase for a given height. The coinbase
 // equation is:
 //
