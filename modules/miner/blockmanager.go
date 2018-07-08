@@ -40,7 +40,7 @@ func (m *Miner) GetBlockTemplate() (bt types.BlockTemplate, err error) {
 	bt.ParentID    = b.ParentID
 	bt.Nonce       = fmt.Sprintf("%x", b.Nonce)
 	bt.Timestamp   = b.Timestamp
-	bt.Coinbase    = b.CalculateSubsidy(m.persist.Height)
+	bt.Coinbase    = fmt.Sprintf("%x", b.CalculateSubsidy(m.persist.Height))
 	bt.Target      = fmt.Sprintf("%x", m.persist.Target)
 	bt.NonceRange  = string("00000000ffffffff")
 	bt.SizeLimit   = uint64(2e6)
