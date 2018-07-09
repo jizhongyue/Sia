@@ -50,7 +50,7 @@ func (m *Miner) GetBlockTemplate() (bt types.BlockTemplate, err error) {
 	blockReward := types.CalculateCoinbase(m.persist.Height + 1)
 	bt.Coinbase    = fmt.Sprintf("%x", coinbase)
 	bt.BlockReward = fmt.Sprintf("%x", blockReward)
-	bt.BlockFee    = fmt.Sprintf("%x", coinbase - blockReward)
+	bt.BlockFee    = fmt.Sprintf("%x", coinbase.Sub(blockReward))
 
 	tree := crypto.NewTree()
 	var buf bytes.Buffer
