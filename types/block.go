@@ -70,6 +70,8 @@ type (
 		ProofSet      [][]byte           `json:proofset`
 		MerkleBranch  []crypto.Hash      `json:merklebranch`
 		Coinbase      string             `json:coinbase`
+		BlockReward   string             `json:blockreward`
+		BlockFee      string             `json:blockfee`
 		Target        string             `json:target`
 		NonceRange    string             `json:noncerange`
 		SizeLimit     uint64             `json:sizelimit`
