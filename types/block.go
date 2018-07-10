@@ -56,8 +56,6 @@ type (
 	// merkle tree Leaf for getblocktemplate
 	MerkleLeaf struct {
 		Data          []byte           `json:data`
-		Txid          []byte           `json:txid`
-		Hash          []byte           `json:hash`
 	}
 
 	// struct for getblocktemplate
@@ -69,9 +67,9 @@ type (
 		Transactions  []MerkleLeaf       `json:transaction`
 		ProofSet      [][]byte           `json:proofset`
 		MerkleBranch  []crypto.Hash      `json:merklebranch`
-		Coinbase      string             `json:coinbase`
-		BlockReward   string             `json:blockreward`
-		BlockFee      string             `json:blockfee`
+		Coinbase      Currency           `json:coinbase`
+		BlockReward   Currency           `json:blockreward`
+		BlockFee      Currency           `json:blockfee`
 		Target        string             `json:target`
 		NonceRange    string             `json:noncerange`
 		SizeLimit     uint64             `json:sizelimit`

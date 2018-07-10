@@ -54,11 +54,11 @@ func (m *Miner) GetBlockTemplate() (bt types.BlockTemplate, err error) {
 	bt.Height      = m.persist.Height
 
 	// coinbase, blockReward, blockFee
-	coinbase    := b.CalculateSubsidy(m.persist.Height + 1)
-	blockReward := types.CalculateCoinbase(m.persist.Height + 1)
-	bt.Coinbase    = fmt.Sprintf("%x", coinbase)
-	bt.BlockReward = fmt.Sprintf("%x", blockReward)
-	bt.BlockFee    = fmt.Sprintf("%x", coinbase.Sub(blockReward))
+	coinbase    := b.CalculateSubsidy(m.persist.Height + 1).Div64(1e16)
+	blockReward := types.CalculateCoinbase(m.persist.Height + 1).Div64(1e16)
+	bt.Coinbase    = coinbase
+	bt.BlockReward = blockReward
+	bt.BlockFee    = coinbase.Sub(blockReward)
 
 	tree := crypto.NewTree()
 	var buf bytes.Buffer
