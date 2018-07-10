@@ -36,7 +36,15 @@ func (m *Miner) GetBlockTemplate() (bt types.BlockTemplate, err error) {
 		return types.BlockTemplate{}, err
 	}
 
-	b := m.blockForGbt()
+	if time.Since(m.sourceBlockTime) > MaxSourceBlockAge || m.memProgress%(HeaderMemory/BlockMemory) == 0 {
+		m.newSourceBlockForGbt()
+	}
+	m.memProgress++
+	if m.memProgress == HeaderMemory {
+		m.memProgress = 0
+	}
+
+	b := m.sourceBlock
 	bt.ParentID    = b.ParentID
 	bt.Nonce       = fmt.Sprintf("%x", b.Nonce)
 	bt.Timestamp   = b.Timestamp
@@ -198,6 +206,26 @@ func (m *Miner) newSourceBlock() {
 	m.sourceBlockTime = time.Now()
 }
 
+// newSourceBlock creates a new source block for the block manager so that new
+// headers will use the updated source block.
+func (m *Miner) newSourceBlockForGbt() {
+	// To guarantee garbage collection of old blocks, delete all header entries
+	// that have not been reached for the current block.
+	for m.memProgress%(HeaderMemory/BlockMemory) != 0 {
+		delete(m.blockMem, m.headerMem[m.memProgress])
+		delete(m.arbDataMem, m.headerMem[m.memProgress])
+		m.memProgress++
+		if m.memProgress == HeaderMemory {
+			m.memProgress = 0
+		}
+	}
+
+	// Update the source block.
+	block := m.blockForGbt()
+	m.sourceBlock = &block
+	m.sourceBlockTime = time.Now()
+}
+
 // HeaderForWork returns a header that is ready for nonce grinding. The miner
 // will store the header in memory for a while, depending on the constants
 // 'HeaderMemory', 'BlockMemory', and 'MaxSourceBlockAge'. On the full network,
@@ -351,6 +379,9 @@ func (m *Miner) SubmitHeader(bh types.BlockHeader) error {
 
 // SubmitBlock takes a solved block and submits it to the blockchain.
 func (m *Miner) SubmitBlock(b types.Block, bh types.BlockHeader) error {
+	m.log.Println("header.prevHash: ",  bh.ParentID)
+	m.log.Println("header.Nonce: ",     bh.Nonce)
+	m.log.Println("header.Timestamp: ", bh.Timestamp)
 	if err := m.tg.Add(); err != nil {
 		return err
 	}

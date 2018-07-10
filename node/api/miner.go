@@ -164,7 +164,7 @@ func (api *API) minerBlockHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		WriteError(w, Error{err.Error()}, http.StatusBadRequest)
 		return
 	}
-	WriteJSON(w, mbsp.Header);
+	// WriteJSON(w, mbsp.Header);
 
 	var b types.Block
 	b.ParentID     = mbsp.Header.ParentID
