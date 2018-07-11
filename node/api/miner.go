@@ -181,7 +181,7 @@ func (api *API) minerBlockHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		b.Transactions = append(b.Transactions, txn)
 	}
 	var coinbase types.Transaction
-	coinb, err := hex.DecodeString(mbsp.Coinbase)
+	coinb := fmt.Sprintf("%s", mbsp.Coinbase)
 	if err != nil {
 		encoding.Unmarshal(coinb, &coinbase)
 		b.Transactions = append(b.Transactions, coinbase)
