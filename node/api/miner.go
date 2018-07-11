@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"encoding/json"
 	"io/ioutil"
-	"encoding/hex"
 
 	"github.com/NebulousLabs/Sia/encoding"
 	"github.com/NebulousLabs/Sia/types"
