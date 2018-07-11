@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"encoding/json"
 	"io/ioutil"
+	"hex"
 
 	"github.com/NebulousLabs/Sia/encoding"
 	"github.com/NebulousLabs/Sia/types"
@@ -180,8 +181,11 @@ func (api *API) minerBlockHandlerPOST(w http.ResponseWriter, req *http.Request, 
 		b.Transactions = append(b.Transactions, txn)
 	}
 	var coinbase types.Transaction
-	encoding.Unmarshal(mbsp.Coinbase, &coinbase)
-	b.Transactions = append(b.Transactions, coinbase)
+	coinb, err := hex.DecodeString(mbsp.Coinbase)
+	if err != nil {
+		encoding.Unmarshal(coinb, &coinbase)
+		b.Transactions = append(b.Transactions, coinbase)
+	}
 
 	err = api.miner.SubmitBlock(b, mbsp.Header)
 	if err != nil {

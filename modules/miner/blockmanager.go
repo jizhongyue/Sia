@@ -402,7 +402,7 @@ func (m *Miner) SubmitBlock(b types.Block, bh types.BlockHeader) error {
 
 		if types.BlockID(crypto.HashObject(bh)) != b.ID() {
 			m.log.Critical("block reconstruction failed")
-			return errors.New("block.ID != header.ID, prev ID: ", b.ParentID)
+			return errors.New("block.ID != header.ID, prev ID: ")
 		}
 		return nil
 	}()
