@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"encoding/json"
 	"io/ioutil"
+	"fmt"
 
 	"github.com/NebulousLabs/Sia/encoding"
 	"github.com/NebulousLabs/Sia/types"
