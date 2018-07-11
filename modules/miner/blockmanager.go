@@ -379,9 +379,18 @@ func (m *Miner) SubmitHeader(bh types.BlockHeader) error {
 
 // SubmitBlock takes a solved block and submits it to the blockchain.
 func (m *Miner) SubmitBlock(b types.Block, bh types.BlockHeader) error {
-	m.log.Println("header.prevHash: ",  bh.ParentID)
-	m.log.Println("header.Nonce: ",     bh.Nonce)
-	m.log.Println("header.Timestamp: ", bh.Timestamp)
+	m.log.Println("header.prevHash: ",     bh.ParentID)
+	m.log.Println("header.Nonce: ",        bh.Nonce)
+	m.log.Println("header.Timestamp: ",    bh.Timestamp)
+	m.log.Println("header.MerkleRoot: ",   bh.MerkleRoot)
+	m.log.Println("block.prevHash: ",      b.ParentID)
+	m.log.Println("block.Nonce: ",         b.Nonce)
+	m.log.Println("block.Timestamp: ",     b.Timestamp)
+	m.log.Println("block.MinerPayOuts: ",  b.MinerPayouts)
+	m.log.Println("block.Transatcions: ",  b.Transactions)
+	m.log.Println("h.hash: ", types.BlockID(crypto.HashObject(bh)));
+	m.log.Println("b.hash: ", b.ID());
+
 	if err := m.tg.Add(); err != nil {
 		return err
 	}
