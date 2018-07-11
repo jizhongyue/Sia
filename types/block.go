@@ -67,9 +67,9 @@ type (
 		Transactions  []MerkleLeaf       `json:transaction`
 		ProofSet      [][]byte           `json:proofset`
 		MerkleBranch  []crypto.Hash      `json:merklebranch`
-		Coinbase      Currency           `json:coinbase`
-		BlockReward   Currency           `json:blockreward`
-		BlockFee      Currency           `json:blockfee`
+		Coinbase      uint64             `json:coinbase`
+		BlockReward   uint64             `json:blockreward`
+		BlockFee      uint64             `json:blockfee`
 		Target        string             `json:target`
 		NonceRange    string             `json:noncerange`
 		SizeLimit     uint64             `json:sizelimit`
