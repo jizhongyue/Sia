@@ -55,7 +55,7 @@ type (
 type (
 	// merkle tree Leaf for getblocktemplate
 	MerkleLeaf struct {
-		Data          []byte           `json:data`
+		Data          string             `json:data`
 	}
 
 	// struct for getblocktemplate

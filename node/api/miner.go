@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"fmt"
+	"encoding/hex"
 
 	"github.com/NebulousLabs/Sia/encoding"
 	"github.com/NebulousLabs/Sia/types"
+	"github.com/NebulousLabs/Sia/modules"
 
 	"github.com/julienschmidt/httprouter"
 )
@@ -43,8 +45,8 @@ type (
 	MinerBlockSubmitPost struct {
 		Header            types.BlockHeader   `json:header`
 		Coinbase          string              `json:coinbase`
-		MinerPayouts      [][]byte            `json:minerpayouts`
-		Transactions      [][]byte            `json:transactions`
+		MinerPayouts      []string            `json:minerpayouts`
+		Transactions      []string            `json:transactions`
 	}
 )
 
@@ -171,21 +173,26 @@ func (api *API) minerBlockHandlerPOST(w http.ResponseWriter, req *http.Request, 
 	b.Nonce        = mbsp.Header.Nonce
 	b.Timestamp    = mbsp.Header.Timestamp
 	for _, payout := range mbsp.MinerPayouts {
+		payoutByte, _ := hex.DecodeString(payout)
 		po := types.SiacoinOutput{}
-		encoding.Unmarshal(payout, &po)
+		encoding.Unmarshal(payoutByte, &po)
 		b.MinerPayouts = append(b.MinerPayouts, po)
 	}
 	for _, transaction := range mbsp.Transactions {
+		txnByte, _ := hex.DecodeString(transaction)
 		txn := types.Transaction{}
-		encoding.Unmarshal(transaction, &txn)
+		encoding.Unmarshal(txnByte, &txn)
 		b.Transactions = append(b.Transactions, txn)
 	}
-	var coinbase types.Transaction
-	coinb := fmt.Sprintf("%s", mbsp.Coinbase)
-	if err != nil {
-		encoding.Unmarshal([]byte(coinb), &coinbase)
-		b.Transactions = append(b.Transactions, coinbase)
+
+	fmt.Printf("%s\n", mbsp.Coinbase[172:232])
+	fmt.Printf("%s\n", mbsp.Coinbase)
+
+	randBytes, err := hex.DecodeString(mbsp.Coinbase[172:232])
+	randTxn := types.Transaction{
+		ArbitraryData: [][]byte{append(modules.PrefixNonSia[:], randBytes...)},
 	}
+	b.Transactions = append(b.Transactions, randTxn)
 
 	err = api.miner.SubmitBlock(b, mbsp.Header)
 	if err != nil {
