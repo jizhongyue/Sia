@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"fmt"
+	"bytes"
 
 	"github.com/NebulousLabs/Sia/encoding"
 	"github.com/NebulousLabs/Sia/types"
@@ -183,7 +184,7 @@ func (api *API) minerBlockHandlerPOST(w http.ResponseWriter, req *http.Request, 
 	var coinbase types.Transaction
 	coinb := fmt.Sprintf("%s", mbsp.Coinbase)
 	if err != nil {
-		encoding.Unmarshal(coinb, &coinbase)
+		encoding.Unmarshal([]byte(coinb), &coinbase)
 		b.Transactions = append(b.Transactions, coinbase)
 	}
 
