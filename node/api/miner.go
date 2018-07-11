@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"fmt"
-	"bytes"
 
 	"github.com/NebulousLabs/Sia/encoding"
 	"github.com/NebulousLabs/Sia/types"
