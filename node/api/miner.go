@@ -42,7 +42,7 @@ type (
 
 	MinerBlockSubmitPost struct {
 		Header            types.BlockHeader   `json:header`
-		Coinbase          []byte              `json:coinbase`
+		Coinbase          string              `json:coinbase`
 		MinerPayouts      [][]byte            `json:minerpayouts`
 		Transactions      [][]byte            `json:transactions`
 	}
