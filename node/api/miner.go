@@ -182,8 +182,6 @@ func (api *API) minerBlockHandlerPOST(w http.ResponseWriter, req *http.Request, 
 	var coinbase types.Transaction
 	encoding.Unmarshal(mbsp.Coinbase, &coinbase)
 	b.Transactions = append(b.Transactions, coinbase)
-	api.miner.log.Println("[-]coinbase: ", coinbase)
-	api.miner.log.Println("[-]txns: ", b.Transactions)
 
 	err = api.miner.SubmitBlock(b, mbsp.Header)
 	if err != nil {
