@@ -65,22 +65,18 @@ func (m *Miner) GetBlockTemplate() (bt types.BlockTemplate, err error) {
 	// e := types.encoder(&buf)
 	// tree.SetIndex(0)
 	tree.SetIndex(uint64(len(b.MinerPayouts) + len(b.Transactions) - 1))
-	fmt.Printf("--------MinerPayouts: ", b.MinerPayouts)
 	for _, payout := range b.MinerPayouts {
 		payout.MarshalSia(&buf)
 		tree.Push(buf.Bytes())
-		fmt.Printf("mp---hex: %x\n", buf.Bytes());
 
 		var leaf types.MerkleLeaf
 		leaf.Data = fmt.Sprintf("%x", buf.Bytes())
 		bt.MinerPayouts = append(bt.MinerPayouts, leaf)
 		buf.Reset()
 	}
-	fmt.Printf("---------Transactions: ", b.Transactions)
 	for _, txn := range b.Transactions {
 		txn.MarshalSia(&buf)
 		tree.Push(buf.Bytes())
-		fmt.Printf("tx---hex: %x\n", buf.Bytes());
 
 		var leaf types.MerkleLeaf
 		leaf.Data = fmt.Sprintf("%x", buf.Bytes())

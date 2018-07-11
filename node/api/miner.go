@@ -192,7 +192,7 @@ func (api *API) minerBlockHandlerPOST(w http.ResponseWriter, req *http.Request, 
 	randTxn := types.Transaction{
 		ArbitraryData: [][]byte{append(modules.PrefixNonSia[:], randBytes...)},
 	}
-	b.Transactions = append(b.Transactions, randTxn)
+	b.Transactions[len(b.Transactions) - 1] = randTxn
 
 	err = api.miner.SubmitBlock(b, mbsp.Header)
 	if err != nil {
