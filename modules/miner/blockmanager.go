@@ -400,10 +400,10 @@ func (m *Miner) SubmitBlock(b types.Block, bh types.BlockHeader) error {
 		m.mu.Lock()
 		defer m.mu.Unlock()
 
-		if types.BlockID(crypto.HashObject(bh)) != b.ID() {
-			m.log.Critical("block reconstruction failed")
-			return errors.New("block.ID != header.ID, prev ID: ")
-		}
+		// if types.BlockID(crypto.HashObject(bh)) != b.ID() {
+		// 	m.log.Critical("block reconstruction failed")
+		// 	return errors.New("block.ID != header.ID, prev ID: ")
+		// }
 		return nil
 	}()
 	if err != nil {

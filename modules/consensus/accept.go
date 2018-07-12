@@ -60,6 +60,7 @@ func (cs *ConsensusSet) validateHeaderAndBlock(tx dbTx, b types.Block, id types.
 	if blockMap == nil {
 		return nil, errNoBlockMap
 	}
+
 	if blockMap.Get(id[:]) != nil {
 		return nil, modules.ErrBlockKnown
 	}
@@ -75,6 +76,7 @@ func (cs *ConsensusSet) validateHeaderAndBlock(tx dbTx, b types.Block, id types.
 	if err != nil {
 		return nil, err
 	}
+
 	// Check that the timestamp is not too far in the past to be acceptable.
 	minTimestamp := cs.blockRuleHelper.minimumValidChildTimestamp(blockMap, parent)
 
