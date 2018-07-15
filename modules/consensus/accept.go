@@ -9,6 +9,7 @@ import (
 
 	"github.com/NebulousLabs/Sia/modules"
 	"github.com/NebulousLabs/Sia/types"
+	"github.com/NebulousLabs/Sia/build"
 
 	"github.com/coreos/bbolt"
 )
@@ -172,7 +173,7 @@ func (cs *ConsensusSet) addBlockToTree(tx *bolt.Tx, b types.Block, parent *proce
 	// current node. If not, return ErrNonExtending and don't fork the
 	// blockchain.
 	currentNode := currentProcessedBlock(tx)
-	if !newNode.heavierThan(currentNode) {
+	if build.Release == "standard" && !newNode.heavierThan(currentNode) {
 		return changeEntry{}, modules.ErrNonExtendingBlock
 	}
 
