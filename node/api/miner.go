@@ -4,13 +4,14 @@ import (
     "net/http"
     "encoding/json"
     "io/ioutil"
-    "fmt"
+	"fmt"
+	"bytes"
     "encoding/hex"
 
     "github.com/NebulousLabs/Sia/encoding"
     "github.com/NebulousLabs/Sia/types"
     "github.com/NebulousLabs/Sia/modules"
-
+	"github.com/NebulousLabs/Sia/crypto"
     "github.com/julienschmidt/httprouter"
 )
 
@@ -195,6 +196,20 @@ func (api *API) minerBlockHandlerPOST(w http.ResponseWriter, req *http.Request, 
     b.Transactions[len(b.Transactions) - 1] = randTxn
 
     fmt.Println("len(txns): ", len(b.Transactions), "txns :", b.Transactions)
+
+	tree := crypto.NewTree()
+	var buf bytes.Buffer
+	for _, payout := range b.MinerPayouts {
+		payout.MarshalSia(&buf)
+		tree.Push(buf.Bytes())
+		buf.Reset()
+	}
+	for _, txn := range b.Transactions {
+		txn.MarshalSia(&buf)
+		tree.Push(buf.Bytes())
+		buf.Reset()
+	}
+	fmt.Println("block.merkleroot:", tree.Root())
 
     err = api.miner.SubmitBlock(b, mbsp.Header)
     if err != nil {

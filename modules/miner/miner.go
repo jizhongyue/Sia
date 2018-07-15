@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"os"
+	"encoding/json"
+	"io/ioutil"
 
 	"github.com/NebulousLabs/Sia/build"
 	"github.com/NebulousLabs/Sia/crypto"
@@ -59,6 +62,10 @@ type splitSet struct {
 	transactions []types.Transaction
 }
 
+type PoolPayoutAddress struct {
+	PayoutAddress types.UnlockHash  `json: payoutaddress`
+}
+
 type splitSetID int
 
 // Miner struct contains all variables the miner needs
@@ -102,10 +109,11 @@ type Miner struct {
 	hashRate int64 // indicates hashes per second
 
 	// Utils
-	log        *persist.Logger
-	mu         sync.RWMutex
-	persist    persistence
-	persistDir string
+	log            *persist.Logger
+	mu             sync.RWMutex
+	persist        persistence
+	persistDir     string
+	PayoutAddress  types.UnlockHash
 	// tg signals the Miner's goroutines to shut down and blocks until all
 	// goroutines have exited before returning from Close().
 	tg siasync.ThreadGroup
@@ -193,6 +201,11 @@ func New(cs modules.ConsensusSet, tpool modules.TransactionPool, w modules.Walle
 	if err != nil {
 		return nil, errors.New("miner persistence startup failed: " + err.Error())
 	}
+	m.PayoutAddress, err = GetPayoutAddress()
+	if err != nil {
+		return nil, err
+	}
+	m.persist.Address = m.PayoutAddress
 
 	err = m.cs.ConsensusSetSubscribe(m, m.persist.RecentChange, m.tg.StopChan())
 	if err == modules.ErrInvalidConsensusChangeID {
@@ -290,4 +303,22 @@ func (m *Miner) BlocksMined() (goodBlocks, staleBlocks int) {
 		}
 	}
 	return
+}
+
+func GetPayoutAddress() (types.UnlockHash, error) {
+	jsonFile, err := os.Open("/root/.sia/pool_payout_address.conf")
+	if err != nil {
+		return types.UnlockHash{}, err
+	}
+	defer jsonFile.Close()
+	byteValue, _ := ioutil.ReadAll(jsonFile)
+
+	var addr PoolPayoutAddress
+
+	err = json.Unmarshal(byteValue, &addr)
+	if err != nil {
+		return types.UnlockHash{}, err
+	}
+
+	return addr.PayoutAddress, nil
 }

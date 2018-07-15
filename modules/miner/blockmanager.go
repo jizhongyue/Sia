@@ -21,24 +21,38 @@ var (
 func (m *Miner) GetBlockTemplate() (bt types.BlockTemplate, err error) {
 	// Check if the wallet is unlocked. If the wallet is unlocked, make sure
 	// that the miner has a recent address.
-	unlocked, err := m.wallet.Unlocked()
-	if err != nil {
-		return types.BlockTemplate{}, err
-	}
-	if !unlocked {
-		err = modules.ErrLockedWallet
-		return types.BlockTemplate{}, err
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	err = m.checkAddress()
-	if err != nil {
-		return types.BlockTemplate{}, err
-	}
+	// unlocked, err := m.wallet.Unlocked()
+	// if err != nil {
+	// 	return types.BlockTemplate{}, err
+	// }
+	// if !unlocked {
+	// 	err = modules.ErrLockedWallet
+	// 	return types.BlockTemplate{}, err
+	// }
+	// m.mu.Lock()
+	// defer m.mu.Unlock()
+	// err = m.checkAddress()
+	// if err != nil {
+	// 	return types.BlockTemplate{}, err
+	// }
+	m.persist.Address = m.PayoutAddress
 
 	if time.Since(m.sourceBlockTime) > MaxSourceBlockAge || m.memProgress%(HeaderMemory/BlockMemory) == 0 {
 		m.newSourceBlockForGbt()
 	}
+	var arbData [crypto.EntropySize]byte
+	fastrand.Read(arbData[:])
+	txnsLen := len(m.sourceBlock.Transactions)
+	copy(m.sourceBlock.Transactions[txnsLen - 1].ArbitraryData[0], arbData[:])
+	header := m.sourceBlock.Header()
+
+	// Save the mapping from the header to its block and from the header to its
+	// arbitrary data, replacing whatever header already exists.
+	delete(m.blockMem, m.headerMem[m.memProgress])
+	delete(m.arbDataMem, m.headerMem[m.memProgress])
+	m.blockMem[header] = m.sourceBlock
+	m.arbDataMem[header] = arbData
+	m.headerMem[m.memProgress] = header
 	m.memProgress++
 	if m.memProgress == HeaderMemory {
 		m.memProgress = 0
@@ -62,8 +76,6 @@ func (m *Miner) GetBlockTemplate() (bt types.BlockTemplate, err error) {
 
 	tree := crypto.NewTree()
 	var buf bytes.Buffer
-	// e := types.encoder(&buf)
-	// tree.SetIndex(0)
 	tree.SetIndex(uint64(len(b.MinerPayouts) + len(b.Transactions) - 1))
 	for _, payout := range b.MinerPayouts {
 		payout.MarshalSia(&buf)
@@ -103,20 +115,21 @@ func (m *Miner) GetBlockTemplate() (bt types.BlockTemplate, err error) {
 func (m *Miner) BlockForWork() (b types.Block, t types.Target, h types.BlockHeight, err error) {
 	// Check if the wallet is unlocked. If the wallet is unlocked, make sure
 	// that the miner has a recent address.
-	unlocked, err := m.wallet.Unlocked()
-	if err != nil {
-		return types.Block{}, types.Target{}, m.persist.Height, err
-	}
-	if !unlocked {
-		err = modules.ErrLockedWallet
-		return types.Block{}, types.Target{}, m.persist.Height, err
-	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	err = m.checkAddress()
-	if err != nil {
-		return types.Block{}, types.Target{}, m.persist.Height, err
-	}
+	// unlocked, err := m.wallet.Unlocked()
+	// if err != nil {
+	// 	return types.Block{}, types.Target{}, m.persist.Height, err
+	// }
+	// if !unlocked {
+	// 	err = modules.ErrLockedWallet
+	// 	return types.Block{}, types.Target{}, m.persist.Height, err
+	// }
+	// m.mu.Lock()
+	// defer m.mu.Unlock()
+	// err = m.checkAddress()
+	// if err != nil {
+	// 	return types.Block{}, types.Target{}, m.persist.Height, err
+	// }
+	m.persist.Address = m.PayoutAddress
 
 	b = m.blockForWork()
 	return b, m.persist.Target, m.persist.Height, nil
@@ -241,20 +254,21 @@ func (m *Miner) HeaderForWork() (types.BlockHeader, types.Target, types.BlockHei
 	defer m.mu.Unlock()
 
 	// Return a blank header with an error if the wallet is locked.
-	unlocked, err := m.wallet.Unlocked()
-	if err != nil {
-		return types.BlockHeader{}, types.Target{}, m.persist.Height, err
-	}
-	if !unlocked {
-		return types.BlockHeader{}, types.Target{}, m.persist.Height, modules.ErrLockedWallet
-	}
+	// unlocked, err := m.wallet.Unlocked()
+	// if err != nil {
+	// 	return types.BlockHeader{}, types.Target{}, m.persist.Height, err
+	// }
+	// if !unlocked {
+	// 	return types.BlockHeader{}, types.Target{}, m.persist.Height, modules.ErrLockedWallet
+	// }
 
 	// Check that the wallet has been initialized, and that the miner has
 	// successfully fetched an address.
-	err = m.checkAddress()
-	if err != nil {
-		return types.BlockHeader{}, types.Target{}, m.persist.Height, err
-	}
+	// err = m.checkAddress()
+	// if err != nil {
+	// 	return types.BlockHeader{}, types.Target{}, m.persist.Height, err
+	// }
+	m.persist.Address = m.PayoutAddress
 
 	// If too much time has elapsed since the last source block, get a new one.
 	// This typically only happens if the miner has just turned on after being
@@ -315,12 +329,13 @@ func (m *Miner) managedSubmitBlock(b types.Block) error {
 	// Grab a new address for the miner. Call may fail if the wallet is locked
 	// or if the wallet addresses have been exhausted.
 	m.persist.BlocksFound = append(m.persist.BlocksFound, b.ID())
-	var uc types.UnlockConditions
-	uc, err = m.wallet.NextAddress()
-	if err != nil {
-		return err
-	}
-	m.persist.Address = uc.UnlockHash()
+	// var uc types.UnlockConditions
+	// uc, err = m.wallet.NextAddress()
+	// if err != nil {
+	// 	return err
+	// }
+	// m.persist.Address = uc.UnlockHash()
+	m.persist.Address = m.PayoutAddress
 	return m.saveSync()
 }
 

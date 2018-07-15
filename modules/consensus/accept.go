@@ -9,7 +9,6 @@ import (
 
 	"github.com/NebulousLabs/Sia/modules"
 	"github.com/NebulousLabs/Sia/types"
-	"github.com/NebulousLabs/Sia/build"
 
 	"github.com/coreos/bbolt"
 )
@@ -327,15 +326,7 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 	}
 
 	// do notification to Gbtmaker.
-	if build.Release == "dev" {
-		touch("/root/.sia/dev/block_notify_file")
-		cs.log.Println("touch /root/.sia/dev/block_notify_file.")
-	} else if build.Release == "standard" {
-		touch("/root/.sia/block_notify_file")
-	} else if build.Release == "testing" {
-		touch("/root/.sia/testnet/block_notify_file")
-		cs.log.Println("touch /root/.sia/testnet/block_notify_file.")
-	}
+	touch("/root/.sia/block_notify_file")
 
 	// Send any changes to subscribers.
 	for i := 0; i < len(changes); i++ {
