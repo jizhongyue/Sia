@@ -148,10 +148,11 @@ func (m *Miner) blockForGbt() types.Block {
 	}
 
 	// Update the address + payouts.
-	err := m.checkAddress()
-	if err != nil {
-		m.log.Println(err)
-	}
+	// err := m.checkAddress()
+	// if err != nil {
+	// 	m.log.Println(err)
+	// }
+	m.persist.Address = m.PayoutAddress
 	b.MinerPayouts = []types.SiacoinOutput{{
 		Value:      b.CalculateSubsidy(m.persist.Height + 1),
 		UnlockHash: m.persist.Address,
@@ -180,10 +181,11 @@ func (m *Miner) blockForWork() types.Block {
 	}
 
 	// Update the address + payouts.
-	err := m.checkAddress()
-	if err != nil {
-		m.log.Println(err)
-	}
+	// err := m.checkAddress()
+	// if err != nil {
+	// 	m.log.Println(err)
+	// }
+	m.persist.Address = m.PayoutAddress
 	b.MinerPayouts = []types.SiacoinOutput{{
 		Value:      b.CalculateSubsidy(m.persist.Height + 1),
 		UnlockHash: m.persist.Address,
