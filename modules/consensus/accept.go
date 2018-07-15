@@ -127,7 +127,7 @@ func (cs *ConsensusSet) validateHeader(tx dbTx, h types.BlockHeader) error {
 	}
 
 	// Check that the target of the new block is sufficient.
-	if !checkHeaderTarget(h, parent.ChildTarget) {
+	if build.Release == "standard" && !checkHeaderTarget(h, parent.ChildTarget) {
 		return modules.ErrBlockUnsolved
 	}
 

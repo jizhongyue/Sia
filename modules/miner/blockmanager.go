@@ -322,7 +322,7 @@ func (m *Miner) managedSubmitBlock(b types.Block) error {
 	}
 	if err != nil {
 		m.tpool.PurgeTransactionPool()
-		m.log.Critical("ERROR: an invalid block was submitted:", err)
+		m.log.Println("ERROR: an invalid block was submitted:", err)
 		return err
 	}
 	m.mu.Lock()
