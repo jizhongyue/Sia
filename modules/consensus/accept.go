@@ -322,7 +322,7 @@ func (cs *ConsensusSet) managedAcceptBlocks(blocks []types.Block) (blockchainExt
 		return false, setErr
 	}
 	// Stop here if the blocks did not extend the longest blockchain.
-	if !chainExtended {
+	if build.Release == "standard" && !chainExtended {
 		return false, modules.ErrNonExtendingBlock
 	}
 

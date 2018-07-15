@@ -70,7 +70,7 @@ func (bv stdBlockValidator) ValidateBlock(b types.Block, id types.BlockID, minTi
 	}
 
 	// Check that the target of the new block is sufficient.
-	if !checkTarget(b, id, target) {
+	if build.Release == "standard" && !checkTarget(b, id, target) {
 		return modules.ErrBlockUnsolved
 	}
 
