@@ -4,14 +4,11 @@ import (
     "net/http"
     "encoding/json"
     "io/ioutil"
-	"fmt"
-	"bytes"
     "encoding/hex"
 
     "github.com/NebulousLabs/Sia/encoding"
     "github.com/NebulousLabs/Sia/types"
     "github.com/NebulousLabs/Sia/modules"
-	"github.com/NebulousLabs/Sia/crypto"
     "github.com/julienschmidt/httprouter"
 )
 
@@ -153,7 +150,7 @@ func (api *API) minerBlockTemplateGET(w http.ResponseWriter, req *http.Request, 
     WriteJSON(w, result)
 }
 
-// minerBlockHandlerPOST handles the API call to submit a block header to the
+// minerBlockHandlerPOST handles the API call to submit a block to the
 // miner.
 func (api *API) minerBlockHandlerPOST(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
     var mbsp MinerBlockSubmitPost
@@ -162,7 +159,6 @@ func (api *API) minerBlockHandlerPOST(w http.ResponseWriter, req *http.Request, 
         WriteError(w, Error{err.Error()}, http.StatusBadRequest)
         return
     }
-    // err = json.Unmarshal(body, &b)
     err = json.Unmarshal(body, &mbsp)
     if err != nil {
         WriteError(w, Error{err.Error()}, http.StatusBadRequest)
@@ -186,30 +182,23 @@ func (api *API) minerBlockHandlerPOST(w http.ResponseWriter, req *http.Request, 
         b.Transactions = append(b.Transactions, txn)
     }
 
+    // Get Arbitrary Data From coinbaseHex.
+    //len(coinb1) =          64       +             8         +         8       +       16          +     20            
+    //            =   len(pointer)*8  | arbitrary array.size  |  len(arbitrary) | NonSia0000000000  |  coinbaseInfo 
+    //
+    //      4     +     8    +    8
+    //    xnonce1 |  xnonce2 |  coinb2
+    // 
+    // Arbitrary Data is:
+    //                  NonSia0000000000 + coinbaseInfo + xnonce1 + xnonce2
+    //
+    // We only need get:
+    //              coinbaseInfo + xnonce1 + xnonce2 = 20 + 4 + 8 = 32 (From 192 index, catch 64 Hex)
     randBytes, err := hex.DecodeString(mbsp.Coinbase[192:256])
-    fmt.Printf("T: %T, randBytes :%s\n", randBytes, string(randBytes))
-    fmt.Println("randBytes: ", randBytes)
-
     randTxn := types.Transaction{
         ArbitraryData: [][]byte{append(modules.PrefixNonSia[:], randBytes...)},
     }
     b.Transactions[len(b.Transactions) - 1] = randTxn
-
-    fmt.Println("len(txns): ", len(b.Transactions), "txns :", b.Transactions)
-
-	tree := crypto.NewTree()
-	var buf bytes.Buffer
-	for _, payout := range b.MinerPayouts {
-		payout.MarshalSia(&buf)
-		tree.Push(buf.Bytes())
-		buf.Reset()
-	}
-	for _, txn := range b.Transactions {
-		txn.MarshalSia(&buf)
-		tree.Push(buf.Bytes())
-		buf.Reset()
-	}
-	fmt.Println("block.merkleroot:", tree.Root())
 
     err = api.miner.SubmitBlock(b, mbsp.Header)
     if err != nil {

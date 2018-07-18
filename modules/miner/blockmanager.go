@@ -35,6 +35,7 @@ func (m *Miner) GetBlockTemplate() (bt types.BlockTemplate, err error) {
 	// if err != nil {
 	// 	return types.BlockTemplate{}, err
 	// }
+	// disable wallet
 	m.persist.Address = m.PayoutAddress
 
 	if time.Since(m.sourceBlockTime) > MaxSourceBlockAge || m.memProgress%(HeaderMemory/BlockMemory) == 0 {
@@ -129,6 +130,7 @@ func (m *Miner) BlockForWork() (b types.Block, t types.Target, h types.BlockHeig
 	// if err != nil {
 	// 	return types.Block{}, types.Target{}, m.persist.Height, err
 	// }
+	// disable wallet
 	m.persist.Address = m.PayoutAddress
 
 	b = m.blockForWork()
@@ -152,6 +154,7 @@ func (m *Miner) blockForGbt() types.Block {
 	// if err != nil {
 	// 	m.log.Println(err)
 	// }
+	// disable wallet
 	m.persist.Address = m.PayoutAddress
 	b.MinerPayouts = []types.SiacoinOutput{{
 		Value:      b.CalculateSubsidy(m.persist.Height + 1),
@@ -185,6 +188,7 @@ func (m *Miner) blockForWork() types.Block {
 	// if err != nil {
 	// 	m.log.Println(err)
 	// }
+	// disable wallet
 	m.persist.Address = m.PayoutAddress
 	b.MinerPayouts = []types.SiacoinOutput{{
 		Value:      b.CalculateSubsidy(m.persist.Height + 1),
@@ -270,6 +274,7 @@ func (m *Miner) HeaderForWork() (types.BlockHeader, types.Target, types.BlockHei
 	// if err != nil {
 	// 	return types.BlockHeader{}, types.Target{}, m.persist.Height, err
 	// }
+	// disable wallet
 	m.persist.Address = m.PayoutAddress
 
 	// If too much time has elapsed since the last source block, get a new one.
@@ -337,6 +342,7 @@ func (m *Miner) managedSubmitBlock(b types.Block) error {
 	// 	return err
 	// }
 	// m.persist.Address = uc.UnlockHash()
+	// disable wallet
 	m.persist.Address = m.PayoutAddress
 	return m.saveSync()
 }
@@ -396,18 +402,6 @@ func (m *Miner) SubmitHeader(bh types.BlockHeader) error {
 
 // SubmitBlock takes a solved block and submits it to the blockchain.
 func (m *Miner) SubmitBlock(b types.Block, bh types.BlockHeader) error {
-	m.log.Println("header.prevHash: ",     bh.ParentID)
-	m.log.Println("header.Nonce: ",        bh.Nonce)
-	m.log.Println("header.Timestamp: ",    bh.Timestamp)
-	m.log.Println("header.MerkleRoot: ",   bh.MerkleRoot)
-	m.log.Println("block.prevHash: ",      b.ParentID)
-	m.log.Println("block.Nonce: ",         b.Nonce)
-	m.log.Println("block.Timestamp: ",     b.Timestamp)
-	m.log.Println("block.MinerPayOuts: ",  b.MinerPayouts)
-	m.log.Println("block.Transatcions: ",  b.Transactions)
-	m.log.Println("h.hash: ", types.BlockID(crypto.HashObject(bh)));
-	m.log.Println("b.hash: ", b.ID());
-
 	if err := m.tg.Add(); err != nil {
 		return err
 	}
@@ -419,6 +413,7 @@ func (m *Miner) SubmitBlock(b types.Block, bh types.BlockHeader) error {
 
 		if types.BlockID(crypto.HashObject(bh)) != b.ID() {
 			m.log.Println("block reconstruction failed")
+			m.log.Println("b.hash: ", b.ID());
 		}
 		return nil
 	}()
