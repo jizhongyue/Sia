@@ -102,6 +102,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"encoding/json"
+	"io/ioutil"
 
 	"github.com/NebulousLabs/Sia/modules"
 	"github.com/NebulousLabs/Sia/persist"
@@ -247,6 +249,13 @@ func New(addr string, bootstrap bool, persistDir string) (*Gateway, error) {
 	if loadErr := g.load(); loadErr != nil && !os.IsNotExist(loadErr) {
 		return nil, loadErr
 	}
+
+	// Add the local node list.
+	// If errors, we can ignore it. 
+	if loadLocalErr := g.loadLocalPersist(); loadLocalErr != nil {
+		g.log.Println("Found no node list file,", loadLocalErr)
+	}
+
 	// Spawn the thread to periodically save the gateway.
 	go g.threadedSaveLoop()
 	// Make sure that the gateway saves after shutdown.
@@ -328,6 +337,32 @@ func New(addr string, bootstrap bool, persistDir string) (*Gateway, error) {
 	go g.threadedLearnHostname()
 
 	return g, nil
+}
+
+// loadLocalPersist loads the Gateway's persistent data from disk.
+func (g *Gateway) loadLocalPersist() error {
+	jsonFile, err := os.Open("/root/.sia/nodes.json")
+	if err != nil {
+		return err
+	}
+	defer jsonFile.Close()
+	byteValue, _ := ioutil.ReadAll(jsonFile)
+
+	var nodes []*node
+	json.Unmarshal(byteValue, &nodes)
+	if err != nil {
+		return err
+	}
+	for _, node := range nodes {
+		err := g.addNode(node.NetAddress)
+		g.log.Println("Load own local node.NetAddress: ", node.NetAddress)
+		if err != nil {
+			g.log.Printf("WARN: error loading node '%v' from persist: %v", node, err)
+			continue
+		}
+		g.nodes[node.NetAddress].WasOutboundPeer = true
+	}
+	return nil
 }
 
 // enforce that Gateway satisfies the modules.Gateway interface
