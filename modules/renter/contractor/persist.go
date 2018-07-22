@@ -4,23 +4,23 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/NebulousLabs/Sia/crypto"
-	"github.com/NebulousLabs/Sia/modules"
-	"github.com/NebulousLabs/Sia/modules/renter/proto"
-	"github.com/NebulousLabs/Sia/persist"
-	"github.com/NebulousLabs/Sia/types"
+	"gitlab.com/NebulousLabs/Sia/modules"
+	"gitlab.com/NebulousLabs/Sia/modules/renter/proto"
+	"gitlab.com/NebulousLabs/Sia/persist"
+	"gitlab.com/NebulousLabs/Sia/types"
 
-	"github.com/NebulousLabs/errors"
+	"gitlab.com/NebulousLabs/errors"
 )
 
 // contractorPersist defines what Contractor data persists across sessions.
 type contractorPersist struct {
-	Allowance     modules.Allowance         `json:"allowance"`
-	BlockHeight   types.BlockHeight         `json:"blockheight"`
-	CurrentPeriod types.BlockHeight         `json:"currentperiod"`
-	LastChange    modules.ConsensusChangeID `json:"lastchange"`
-	OldContracts  []modules.RenterContract  `json:"oldcontracts"`
-	RenewedIDs    map[string]string         `json:"renewedids"`
+	Allowance     modules.Allowance               `json:"allowance"`
+	BlockHeight   types.BlockHeight               `json:"blockheight"`
+	CurrentPeriod types.BlockHeight               `json:"currentperiod"`
+	LastChange    modules.ConsensusChangeID       `json:"lastchange"`
+	OldContracts  []modules.RenterContract        `json:"oldcontracts"`
+	RenewedFrom   map[string]types.FileContractID `json:"renewedfrom"`
+	RenewedTo     map[string]types.FileContractID `json:"renewedto"`
 }
 
 // persistData returns the data in the Contractor that will be saved to disk.
@@ -30,13 +30,17 @@ func (c *Contractor) persistData() contractorPersist {
 		BlockHeight:   c.blockHeight,
 		CurrentPeriod: c.currentPeriod,
 		LastChange:    c.lastChange,
-		RenewedIDs:    make(map[string]string),
+		RenewedFrom:   make(map[string]types.FileContractID),
+		RenewedTo:     make(map[string]types.FileContractID),
+	}
+	for k, v := range c.renewedFrom {
+		data.RenewedFrom[k.String()] = v
+	}
+	for k, v := range c.renewedTo {
+		data.RenewedTo[k.String()] = v
 	}
 	for _, contract := range c.oldContracts {
 		data.OldContracts = append(data.OldContracts, contract)
-	}
-	for oldID, newID := range c.renewedIDs {
-		data.RenewedIDs[oldID.String()] = newID.String()
 	}
 	return data
 }
@@ -52,14 +56,21 @@ func (c *Contractor) load() error {
 	c.blockHeight = data.BlockHeight
 	c.currentPeriod = data.CurrentPeriod
 	c.lastChange = data.LastChange
+	var fcid types.FileContractID
+	for k, v := range data.RenewedFrom {
+		if err := fcid.LoadString(k); err != nil {
+			return err
+		}
+		c.renewedFrom[fcid] = v
+	}
+	for k, v := range data.RenewedTo {
+		if err := fcid.LoadString(k); err != nil {
+			return err
+		}
+		c.renewedTo[fcid] = v
+	}
 	for _, contract := range data.OldContracts {
 		c.oldContracts[contract.ID] = contract
-	}
-	for oldString, newString := range data.RenewedIDs {
-		var oldHash, newHash crypto.Hash
-		oldHash.LoadString(oldString)
-		newHash.LoadString(newString)
-		c.renewedIDs[types.FileContractID(oldHash)] = types.FileContractID(newHash)
 	}
 
 	return nil
@@ -104,7 +115,6 @@ func convertPersist(dir string) error {
 		BlockHeight:   p.BlockHeight,
 		CurrentPeriod: p.CurrentPeriod,
 		LastChange:    p.LastChange,
-		RenewedIDs:    p.RenewedIDs,
 	}
 	for _, c := range p.OldContracts {
 		data.OldContracts = append(data.OldContracts, modules.RenterContract{

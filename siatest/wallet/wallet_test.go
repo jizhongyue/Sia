@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NebulousLabs/Sia/build"
-	"github.com/NebulousLabs/Sia/siatest"
-	"github.com/NebulousLabs/Sia/types"
+	"gitlab.com/NebulousLabs/Sia/build"
+	"gitlab.com/NebulousLabs/Sia/siatest"
+	"gitlab.com/NebulousLabs/Sia/types"
 )
 
 // TestTransactionReorg makes sure that a processedTransaction isn't returned
@@ -18,10 +18,8 @@ func TestTransactionReorg(t *testing.T) {
 		t.SkipNow()
 	}
 
-	testdir, err := siatest.TestDir(t.Name())
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Create testing directory.
+	testdir := walletTestDir(t.Name())
 
 	// Create two miners
 	miner1, err := siatest.NewNode(siatest.Miner(filepath.Join(testdir, "miner1")))

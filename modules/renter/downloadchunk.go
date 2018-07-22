@@ -4,14 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
-	"github.com/NebulousLabs/Sia/crypto"
-	"github.com/NebulousLabs/Sia/modules"
-	"github.com/NebulousLabs/Sia/types"
+	"gitlab.com/NebulousLabs/Sia/crypto"
+	"gitlab.com/NebulousLabs/Sia/modules"
 
-	"github.com/NebulousLabs/errors"
+	"gitlab.com/NebulousLabs/errors"
 )
 
 // downloadPieceInfo contains all the information required to download and
@@ -42,14 +40,14 @@ type unfinishedDownloadChunk struct {
 	masterKey   crypto.TwofishKey
 
 	// Fetch + Write instructions - read only or otherwise thread safe.
-	staticChunkIndex  uint64                                     // Required for deriving the encryption keys for each piece.
-	staticCacheID     string                                     // Used to uniquely identify a chunk in the chunk cache.
-	staticChunkMap    map[types.FileContractID]downloadPieceInfo // Maps from file contract ids to the info for the piece associated with that contract
+	staticChunkIndex  uint64                       // Required for deriving the encryption keys for each piece.
+	staticCacheID     string                       // Used to uniquely identify a chunk in the chunk cache.
+	staticChunkMap    map[string]downloadPieceInfo // Maps from host PubKey to the info for the piece associated with that host
 	staticChunkSize   uint64
 	staticFetchLength uint64 // Length within the logical chunk to fetch.
 	staticFetchOffset uint64 // Offset within the logical chunk that is being downloaded.
 	staticPieceSize   uint64
-	staticWriteOffset int64 // Offet within the writer to write the completed data.
+	staticWriteOffset int64 // Offset within the writer to write the completed data.
 
 	// Fetch + Write instructions - read only or otherwise thread safe.
 	staticLatencyTarget time.Duration
@@ -155,7 +153,7 @@ func (udc *unfinishedDownloadChunk) returnMemory() {
 	if udc.piecesCompleted >= udc.erasureCode.MinPieces() {
 		// udc.piecesRegistered is guaranteed to be at most equal to the number
 		// of overdrive pieces, meaning it will be equal to or less than
-		// initalMemory.
+		// initialMemory.
 		maxMemory = uint64(udc.piecesCompleted+udc.piecesRegistered) * udc.staticPieceSize
 	}
 	// If the chunk recovery has completed, the maximum number of pieces is the
@@ -177,26 +175,6 @@ func (udc *unfinishedDownloadChunk) threadedRecoverLogicalData() error {
 	// Ensure cleanup occurs after the data is recovered, whether recovery
 	// succeeds or fails.
 	defer udc.managedCleanUp()
-
-	// Decrypt the chunk pieces. This doesn't need to happen under a lock,
-	// because any thread potentially writing to the physicalChunkData array is
-	// going to be stopped by the fact that the chunk is complete.
-	for i := range udc.physicalChunkData {
-		// Skip empty pieces.
-		if udc.physicalChunkData[i] == nil {
-			continue
-		}
-
-		key := deriveKey(udc.masterKey, udc.staticChunkIndex, uint64(i))
-		decryptedPiece, err := key.DecryptBytes(udc.physicalChunkData[i])
-		if err != nil {
-			udc.mu.Lock()
-			udc.fail(err)
-			udc.mu.Unlock()
-			return errors.AddContext(err, "unable to decrypt chunk")
-		}
-		udc.physicalChunkData[i] = decryptedPiece
-	}
 
 	// Recover the pieces into the logical chunk data.
 	//
@@ -250,7 +228,6 @@ func (udc *unfinishedDownloadChunk) threadedRecoverLogicalData() error {
 	udc.download.mu.Lock()
 	defer udc.download.mu.Unlock()
 	udc.download.chunksRemaining--
-	atomic.AddUint64(&udc.download.atomicDataReceived, udc.staticFetchLength)
 	if udc.download.chunksRemaining == 0 {
 		// Download is complete, send out a notification and close the
 		// destination writer.

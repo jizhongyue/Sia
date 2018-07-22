@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"bytes"
 
-	"github.com/NebulousLabs/Sia/crypto"
-	"github.com/NebulousLabs/Sia/types"
+	"gitlab.com/NebulousLabs/Sia/crypto"
+	"gitlab.com/NebulousLabs/Sia/types"
 
 	"github.com/julienschmidt/httprouter"
 )

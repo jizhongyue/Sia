@@ -26,15 +26,15 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/NebulousLabs/Sia/build"
-	"github.com/NebulousLabs/Sia/modules"
-	"github.com/NebulousLabs/Sia/modules/renter/contractor"
-	"github.com/NebulousLabs/Sia/modules/renter/hostdb"
-	"github.com/NebulousLabs/Sia/persist"
-	siasync "github.com/NebulousLabs/Sia/sync"
-	"github.com/NebulousLabs/Sia/types"
+	"gitlab.com/NebulousLabs/Sia/build"
+	"gitlab.com/NebulousLabs/Sia/modules"
+	"gitlab.com/NebulousLabs/Sia/modules/renter/contractor"
+	"gitlab.com/NebulousLabs/Sia/modules/renter/hostdb"
+	"gitlab.com/NebulousLabs/Sia/persist"
+	siasync "gitlab.com/NebulousLabs/Sia/sync"
+	"gitlab.com/NebulousLabs/Sia/types"
 
-	"github.com/NebulousLabs/threadgroup"
+	"gitlab.com/NebulousLabs/threadgroup"
 )
 
 var (
@@ -110,15 +110,18 @@ type hostContractor interface {
 	// Close closes the hostContractor.
 	Close() error
 
-	// Contracts returns the contracts formed by the contractor.
+	// Contracts returns the staticContracts of the renter's hostContractor.
 	Contracts() []modules.RenterContract
 
-	// ContractByID returns the contract associated with the file contract id.
-	ContractByID(types.FileContractID) (modules.RenterContract, bool)
+	// OldContracts returns the oldContracts of the renter's hostContractor.
+	OldContracts() []modules.RenterContract
+
+	// ContractByPublicKey returns the contract associated with the host key.
+	ContractByPublicKey(types.SiaPublicKey) (modules.RenterContract, bool)
 
 	// ContractUtility returns the utility field for a given contract, along
 	// with a bool indicating if it exists.
-	ContractUtility(types.FileContractID) (modules.ContractUtility, bool)
+	ContractUtility(types.SiaPublicKey) (modules.ContractUtility, bool)
 
 	// CurrentPeriod returns the height at which the current allowance period
 	// began.
@@ -130,17 +133,17 @@ type hostContractor interface {
 
 	// Editor creates an Editor from the specified contract ID, allowing the
 	// insertion, deletion, and modification of sectors.
-	Editor(types.FileContractID, <-chan struct{}) (contractor.Editor, error)
+	Editor(types.SiaPublicKey, <-chan struct{}) (contractor.Editor, error)
 
 	// IsOffline reports whether the specified host is considered offline.
-	IsOffline(types.FileContractID) bool
+	IsOffline(types.SiaPublicKey) bool
 
 	// Downloader creates a Downloader from the specified contract ID,
 	// allowing the retrieval of sectors.
-	Downloader(types.FileContractID, <-chan struct{}) (contractor.Downloader, error)
+	Downloader(types.SiaPublicKey, <-chan struct{}) (contractor.Downloader, error)
 
-	// ResolveID returns the most recent renewal of the specified ID.
-	ResolveID(types.FileContractID) types.FileContractID
+	// ResolveIDToPubKey returns the public key of a host given a contract id.
+	ResolveIDToPubKey(types.FileContractID) types.SiaPublicKey
 
 	// RateLimits Gets the bandwidth limits for connections created by the
 	// contractor and its submodules.
@@ -186,7 +189,7 @@ type Renter struct {
 	// accessed in isolation.
 	//
 	// TODO: Currently the download history doesn't include repair-initiated
-	// downloads, and instead only contains user-initiated downlods.
+	// downloads, and instead only contains user-initiated downloads.
 	downloadHistory   []*download
 	downloadHistoryMu sync.Mutex
 
@@ -303,7 +306,7 @@ func (r *Renter) setBandwidthLimits(downloadSpeed int64, uploadSpeed int64) erro
 		return errors.New("download/upload rate limit can't be below 0")
 	}
 
-	// Check for sentinal "no limits" value.
+	// Check for sentinel "no limits" value.
 	if downloadSpeed == 0 && uploadSpeed == 0 {
 		r.hostContractor.SetRateLimits(0, 0, 0)
 	} else {
@@ -321,7 +324,7 @@ func (r *Renter) setBandwidthLimits(downloadSpeed int64, uploadSpeed int64) erro
 // (like the allowance) to succeed, but then if the bandwidth limits for example
 // are bad, then the allowance will update but the bandwidth will not update.
 func (r *Renter) SetSettings(s modules.RenterSettings) error {
-	// Early input valudation.
+	// Early input validation.
 	if s.MaxDownloadSpeed < 0 || s.MaxUploadSpeed < 0 {
 		return errors.New("bandwidth limits cannot be negative")
 	}
@@ -385,16 +388,21 @@ func (r *Renter) EstimateHostScore(e modules.HostDBEntry) modules.HostScoreBreak
 	return r.hostDB.EstimateHostScore(e)
 }
 
-// Contracts returns an array of host contractor's contracts
+// Contracts returns an array of host contractor's staticContracts
 func (r *Renter) Contracts() []modules.RenterContract { return r.hostContractor.Contracts() }
+
+// OldContracts returns an array of host contractor's oldContracts
+func (r *Renter) OldContracts() []modules.RenterContract {
+	return r.hostContractor.OldContracts()
+}
 
 // CurrentPeriod returns the host contractor's current period
 func (r *Renter) CurrentPeriod() types.BlockHeight { return r.hostContractor.CurrentPeriod() }
 
 // ContractUtility returns the utility field for a given contract, along
 // with a bool indicating if it exists.
-func (r *Renter) ContractUtility(id types.FileContractID) (modules.ContractUtility, bool) {
-	return r.hostContractor.ContractUtility(id)
+func (r *Renter) ContractUtility(pk types.SiaPublicKey) (modules.ContractUtility, bool) {
+	return r.hostContractor.ContractUtility(pk)
 }
 
 // PeriodSpending returns the host contractor's period spending
@@ -504,10 +512,10 @@ func NewCustomRenter(g modules.Gateway, cs modules.ConsensusSet, tpool modules.T
 		return nil, err
 	}
 
-	// Set the bandwidth limits, sincce the contractor doesn't persist them.
+	// Set the bandwidth limits, since the contractor doesn't persist them.
 	//
 	// TODO: Reconsider the way that the bandwidth limits are allocated to the
-	// renter module, becaause really it seems they only impact the contractor.
+	// renter module, because really it seems they only impact the contractor.
 	// The renter itself doesn't actually do any uploading or downloading.
 	err := r.setBandwidthLimits(r.persist.MaxDownloadSpeed, r.persist.MaxUploadSpeed)
 	if err != nil {

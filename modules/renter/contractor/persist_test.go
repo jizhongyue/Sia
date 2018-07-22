@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/NebulousLabs/Sia/build"
-	"github.com/NebulousLabs/Sia/modules"
-	"github.com/NebulousLabs/Sia/modules/renter/proto"
-	"github.com/NebulousLabs/Sia/types"
+	"gitlab.com/NebulousLabs/Sia/build"
+	"gitlab.com/NebulousLabs/Sia/modules"
+	"gitlab.com/NebulousLabs/Sia/modules/renter/proto"
+	"gitlab.com/NebulousLabs/Sia/types"
 )
 
 // memPersist implements the persister interface in-memory.
@@ -25,15 +25,17 @@ func TestSaveLoad(t *testing.T) {
 		persist: new(memPersist),
 	}
 
-	c.renewedIDs = map[types.FileContractID]types.FileContractID{
-		{0}: {1},
-		{1}: {2},
-		{2}: {3},
-	}
 	c.oldContracts = map[types.FileContractID]modules.RenterContract{
 		{0}: {ID: types.FileContractID{0}, HostPublicKey: types.SiaPublicKey{Key: []byte("foo")}},
 		{1}: {ID: types.FileContractID{1}, HostPublicKey: types.SiaPublicKey{Key: []byte("bar")}},
 		{2}: {ID: types.FileContractID{2}, HostPublicKey: types.SiaPublicKey{Key: []byte("baz")}},
+	}
+
+	c.renewedFrom = map[types.FileContractID]types.FileContractID{
+		{1}: {2},
+	}
+	c.renewedTo = map[types.FileContractID]types.FileContractID{
+		{1}: {2},
 	}
 
 	// save, clear, and reload
@@ -42,26 +44,27 @@ func TestSaveLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.hdb = stubHostDB{}
-	c.renewedIDs = make(map[types.FileContractID]types.FileContractID)
 	c.oldContracts = make(map[types.FileContractID]modules.RenterContract)
+	c.renewedFrom = make(map[types.FileContractID]types.FileContractID)
+	c.renewedTo = make(map[types.FileContractID]types.FileContractID)
 	err = c.load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	// check that all fields were restored
-	_, ok0 := c.renewedIDs[types.FileContractID{0}]
-	_, ok1 := c.renewedIDs[types.FileContractID{1}]
-	_, ok2 := c.renewedIDs[types.FileContractID{2}]
-	if !ok0 || !ok1 || !ok2 {
-		t.Fatal("renewed IDs were not restored properly:", c.renewedIDs)
-	}
-	_, ok0 = c.oldContracts[types.FileContractID{0}]
-	_, ok1 = c.oldContracts[types.FileContractID{1}]
-	_, ok2 = c.oldContracts[types.FileContractID{2}]
+	// Check that all fields were restored
+	_, ok0 := c.oldContracts[types.FileContractID{0}]
+	_, ok1 := c.oldContracts[types.FileContractID{1}]
+	_, ok2 := c.oldContracts[types.FileContractID{2}]
 	if !ok0 || !ok1 || !ok2 {
 		t.Fatal("oldContracts were not restored properly:", c.oldContracts)
 	}
-
+	id := types.FileContractID{2}
+	if c.renewedFrom[types.FileContractID{1}] != id {
+		t.Fatal("renewedFrom not restored properly:", c.renewedFrom)
+	}
+	if c.renewedTo[types.FileContractID{1}] != id {
+		t.Fatal("renewedTo not restored properly:", c.renewedTo)
+	}
 	// use stdPersist instead of mock
 	c.persist = NewPersist(build.TempDir("contractor", t.Name()))
 	os.MkdirAll(build.TempDir("contractor", t.Name()), 0700)
@@ -71,24 +74,25 @@ func TestSaveLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.renewedIDs = make(map[types.FileContractID]types.FileContractID)
 	c.oldContracts = make(map[types.FileContractID]modules.RenterContract)
+	c.renewedFrom = make(map[types.FileContractID]types.FileContractID)
+	c.renewedTo = make(map[types.FileContractID]types.FileContractID)
 	err = c.load()
 	if err != nil {
 		t.Fatal(err)
 	}
 	// check that all fields were restored
-	_, ok0 = c.renewedIDs[types.FileContractID{0}]
-	_, ok1 = c.renewedIDs[types.FileContractID{1}]
-	_, ok2 = c.renewedIDs[types.FileContractID{2}]
-	if !ok0 || !ok1 || !ok2 {
-		t.Fatal("renewed IDs were not restored properly:", c.renewedIDs)
-	}
 	_, ok0 = c.oldContracts[types.FileContractID{0}]
 	_, ok1 = c.oldContracts[types.FileContractID{1}]
 	_, ok2 = c.oldContracts[types.FileContractID{2}]
 	if !ok0 || !ok1 || !ok2 {
 		t.Fatal("oldContracts were not restored properly:", c.oldContracts)
+	}
+	if c.renewedFrom[types.FileContractID{1}] != id {
+		t.Fatal("renewedFrom not restored properly:", c.renewedFrom)
+	}
+	if c.renewedTo[types.FileContractID{1}] != id {
+		t.Fatal("renewedTo not restored properly:", c.renewedTo)
 	}
 }
 

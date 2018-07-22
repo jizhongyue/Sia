@@ -1,7 +1,7 @@
 package gateway
 
 import (
-	"errors"
+	"context"
 	"io"
 	"io/ioutil"
 	"net"
@@ -10,10 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NebulousLabs/go-upnp"
+	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/NebulousLabs/go-upnp"
 
-	"github.com/NebulousLabs/Sia/build"
-	"github.com/NebulousLabs/Sia/modules"
+	"gitlab.com/NebulousLabs/Sia/build"
+	"gitlab.com/NebulousLabs/Sia/modules"
 )
 
 // myExternalIP discovers the gateway's external IP by querying a centralized
@@ -41,6 +42,42 @@ func myExternalIP() (string, error) {
 	return strings.TrimSpace(string(buf)), nil
 }
 
+// managedLearnHostname tries to discover the external ip of the machine. If
+// discovering the address failed or if it is invalid, an error is returned.
+func (g *Gateway) managedLearnHostname(cancel <-chan struct{}) (modules.NetAddress, error) {
+	// create ctx to cancel upnp discovery during shutdown
+	ctx, ctxCancel := context.WithTimeout(context.Background(), timeoutIPDiscovery)
+	defer ctxCancel()
+	go func() {
+		select {
+		case <-cancel:
+			ctxCancel()
+		case <-g.threads.StopChan():
+			ctxCancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	// try UPnP first, then fallback to myexternalip.com and peer-to-peer
+	// discovery.
+	var host string
+	d, err := upnp.DiscoverCtx(ctx)
+	if err == nil {
+		host, err = d.ExternalIP()
+	}
+	if err != nil {
+		host, err = g.managedIPFromPeers(ctx.Done())
+	}
+	if !build.DEBUG && err != nil {
+		host, err = myExternalIP()
+	}
+	if err != nil {
+		return "", errors.AddContext(err, "failed to discover external IP")
+	}
+	addr := modules.NetAddress(host)
+	return addr, addr.IsValid()
+}
+
 // threadedLearnHostname discovers the external IP of the Gateway regularly.
 func (g *Gateway) threadedLearnHostname() {
 	if err := g.threads.Add(); err != nil {
@@ -53,19 +90,7 @@ func (g *Gateway) threadedLearnHostname() {
 	}
 
 	for {
-		// try UPnP first, then fallback to myexternalip.com and peer-to-peer
-		// discovery.
-		var host string
-		d, err := upnp.Discover()
-		if err == nil {
-			host, err = d.ExternalIP()
-		}
-		if !build.DEBUG && err != nil {
-			host, err = myExternalIP()
-		}
-		if err != nil {
-			host, err = g.managedIPFromPeers()
-		}
+		host, err := g.managedLearnHostname(nil)
 		if err != nil {
 			g.log.Println("WARN: failed to discover external IP:", err)
 		}
@@ -78,7 +103,7 @@ func (g *Gateway) threadedLearnHostname() {
 		}
 
 		g.mu.RLock()
-		addr := modules.NetAddress(net.JoinHostPort(host, g.port))
+		addr := modules.NetAddress(net.JoinHostPort(string(host), g.port))
 		g.mu.RUnlock()
 		if err := addr.IsValid(); err != nil {
 			g.log.Printf("WARN: discovered hostname %q is invalid: %v", addr, err)
@@ -114,7 +139,16 @@ func (g *Gateway) threadedForwardPort(port string) {
 		return
 	}
 
-	d, err := upnp.Discover()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-g.threads.StopChan():
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	d, err := upnp.DiscoverCtx(ctx)
 	if err != nil {
 		g.log.Printf("WARN: could not automatically forward port %s: no UPnP-enabled devices found: %v", port, err)
 		return
@@ -141,7 +175,16 @@ func (g *Gateway) managedClearPort(port string) {
 		return
 	}
 
-	d, err := upnp.Discover()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		select {
+		case <-g.threads.StopChan():
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+	d, err := upnp.DiscoverCtx(ctx)
 	if err != nil {
 		return
 	}

@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/NebulousLabs/Sia/crypto"
-	"github.com/NebulousLabs/Sia/encoding"
-	"github.com/NebulousLabs/Sia/modules"
-	"github.com/NebulousLabs/Sia/types"
-	"github.com/NebulousLabs/errors"
-	"github.com/NebulousLabs/writeaheadlog"
+	"gitlab.com/NebulousLabs/Sia/crypto"
+	"gitlab.com/NebulousLabs/Sia/encoding"
+	"gitlab.com/NebulousLabs/Sia/modules"
+	"gitlab.com/NebulousLabs/Sia/types"
+	"gitlab.com/NebulousLabs/errors"
+	"gitlab.com/NebulousLabs/writeaheadlog"
 )
 
 const (
@@ -423,7 +423,8 @@ func (cs *ContractSet) managedInsertContract(h contractHeader, roots []crypto.Ha
 		wal:         cs.wal,
 	}
 	cs.mu.Lock()
-	cs.contracts[h.ID()] = sc
+	cs.contracts[sc.header.ID()] = sc
+	cs.pubKeys[string(h.HostPublicKey().Key)] = sc.header.ID()
 	cs.mu.Unlock()
 	return sc.Metadata(), nil
 }
@@ -479,13 +480,15 @@ func (cs *ContractSet) loadSafeContract(filename string, walTxns []*writeaheadlo
 		}
 	}
 	// add to set
-	cs.contracts[header.ID()] = &SafeContract{
+	sc := &SafeContract{
 		header:        header,
 		merkleRoots:   merkleRoots,
 		unappliedTxns: unappliedTxns,
 		headerFile:    headerSection,
 		wal:           cs.wal,
 	}
+	cs.contracts[sc.header.ID()] = sc
+	cs.pubKeys[string(header.HostPublicKey().Key)] = sc.header.ID()
 	return nil
 }
 

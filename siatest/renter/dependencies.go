@@ -1,8 +1,8 @@
 package renter
 
 import (
-	"github.com/NebulousLabs/Sia/modules"
-	"github.com/NebulousLabs/Sia/siatest"
+	"gitlab.com/NebulousLabs/Sia/modules"
+	"gitlab.com/NebulousLabs/Sia/siatest"
 )
 
 // dependencyBlockScan blocks the scan progress of the hostdb until Scan is
@@ -42,7 +42,7 @@ func newDependencyInterruptDownloadBeforeSendingRevision() *siatest.DependencyIn
 }
 
 // newDependencyInterruptDownloadAfterSendingRevision creates a new dependency
-// thta interrupts the download on the renter side right after receiving the
+// that interrupts the download on the renter side right after receiving the
 // signed revision from the host.
 func newDependencyInterruptDownloadAfterSendingRevision() *siatest.DependencyInterruptOnceOnKeyword {
 	return siatest.NewDependencyInterruptOnceOnKeyword("InterruptDownloadAfterSendingRevision")
@@ -56,7 +56,7 @@ func newDependencyInterruptUploadBeforeSendingRevision() *siatest.DependencyInte
 }
 
 // newDependencyInterruptUploadAfterSendingRevision creates a new dependency
-// thta interrupts the upload on the renter side right after receiving the
+// that interrupts the upload on the renter side right after receiving the
 // signed revision from the host.
 func newDependencyInterruptUploadAfterSendingRevision() *siatest.DependencyInterruptOnceOnKeyword {
 	return siatest.NewDependencyInterruptOnceOnKeyword("InterruptUploadAfterSendingRevision")

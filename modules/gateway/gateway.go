@@ -105,10 +105,10 @@ import (
 	"encoding/json"
 	"io/ioutil"
 
-	"github.com/NebulousLabs/Sia/modules"
-	"github.com/NebulousLabs/Sia/persist"
-	siasync "github.com/NebulousLabs/Sia/sync"
-	"github.com/NebulousLabs/fastrand"
+	"gitlab.com/NebulousLabs/Sia/modules"
+	"gitlab.com/NebulousLabs/Sia/persist"
+	siasync "gitlab.com/NebulousLabs/Sia/sync"
+	"gitlab.com/NebulousLabs/fastrand"
 )
 
 var (
@@ -186,6 +186,15 @@ func (g *Gateway) Close() error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.saveSync()
+}
+
+// DiscoverAddress discovers and returns the current public IP address of the
+// gateway. Contrary to Address, DiscoverAddress is blocking and might take
+// multiple minutes to return. A channel to cancel the discovery can be
+// supplied optionally. If nil is supplied, a reasonable timeout will be used
+// by default.
+func (g *Gateway) DiscoverAddress(cancel <-chan struct{}) (modules.NetAddress, error) {
+	return g.managedLearnHostname(cancel)
 }
 
 // New returns an initialized Gateway.

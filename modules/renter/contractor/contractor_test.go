@@ -2,15 +2,13 @@ package contractor
 
 import (
 	"errors"
-	"fmt"
 	"os"
-	"reflect"
 	"testing"
 	"time"
 
-	"github.com/NebulousLabs/Sia/build"
-	"github.com/NebulousLabs/Sia/modules"
-	"github.com/NebulousLabs/Sia/types"
+	"gitlab.com/NebulousLabs/Sia/build"
+	"gitlab.com/NebulousLabs/Sia/modules"
+	"gitlab.com/NebulousLabs/Sia/types"
 )
 
 // newStub is used to test the New function. It implements all of the contractor's
@@ -84,34 +82,6 @@ func TestNew(t *testing.T) {
 	}
 }
 
-// TestResolveID tests the ResolveID method.
-func TestResolveID(t *testing.T) {
-	c := &Contractor{
-		renewedIDs: map[types.FileContractID]types.FileContractID{
-			{1}: {2},
-			{2}: {3},
-			{3}: {4},
-			{5}: {6},
-		},
-	}
-	tests := []struct {
-		id       types.FileContractID
-		resolved types.FileContractID
-	}{
-		{types.FileContractID{0}, types.FileContractID{0}},
-		{types.FileContractID{1}, types.FileContractID{4}},
-		{types.FileContractID{2}, types.FileContractID{4}},
-		{types.FileContractID{3}, types.FileContractID{4}},
-		{types.FileContractID{4}, types.FileContractID{4}},
-		{types.FileContractID{5}, types.FileContractID{6}},
-	}
-	for _, test := range tests {
-		if r := c.ResolveID(test.id); r != test.resolved {
-			t.Errorf("expected %v -> %v, got %v", test.id, test.resolved, r)
-		}
-	}
-}
-
 // TestAllowance tests the Allowance method.
 func TestAllowance(t *testing.T) {
 	c := &Contractor{
@@ -142,69 +112,6 @@ func (stubHostDB) PublicKey() (spk types.SiaPublicKey)                          
 func (stubHostDB) RandomHosts(int, []types.SiaPublicKey) (hs []modules.HostDBEntry, _ error) { return }
 func (stubHostDB) ScoreBreakdown(modules.HostDBEntry) modules.HostScoreBreakdown {
 	return modules.HostScoreBreakdown{}
-}
-
-// TestAllowancePeriodTracking verifies that the contractor tracks its current
-// period correctly as renewals occur.
-func TestAllowancePeriodTracking(t *testing.T) {
-	if testing.Short() {
-		t.SkipNow()
-	}
-	t.Parallel()
-
-	_, c, m, err := newTestingTrio(t.Name())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// set an allowance
-	c.mu.Lock()
-	initialHeight := c.blockHeight
-	c.mu.Unlock()
-	testAllowance := modules.Allowance{
-		Funds:       types.SiacoinPrecision.Mul64(5000),
-		RenewWindow: 10,
-		Hosts:       1,
-		Period:      20,
-	}
-	err = c.SetAllowance(testAllowance)
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = build.Retry(50, 100*time.Millisecond, func() error {
-		if len(c.Contracts()) != 1 {
-			return errors.New("allowance forming seems to have failed")
-		}
-		return nil
-	})
-	if err != nil {
-		t.Error(err)
-	}
-	if c.CurrentPeriod() != initialHeight {
-		t.Fatal("expected current period to start at", initialHeight, "got", c.CurrentPeriod())
-	}
-	// mine until one before the renew window, current period should stay
-	// constant
-	for i := types.BlockHeight(0); i < testAllowance.RenewWindow-1; i++ {
-		_, err = m.AddBlock()
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	if c.CurrentPeriod() != initialHeight {
-		t.Fatal("current period should not have incremented, wanted", initialHeight, "got", c.CurrentPeriod())
-	}
-	// mine another another block. current period should increment.
-	_, err = m.AddBlock()
-	if err != nil {
-		t.Fatal(err)
-	}
-	c.mu.Lock()
-	height := c.blockHeight
-	c.mu.Unlock()
-	if c.CurrentPeriod() != height {
-		t.Fatal("unexpected period", c.CurrentPeriod(), "wanted", height)
-	}
 }
 
 // TestAllowanceSpending verifies that the contractor will not spend more or
@@ -278,7 +185,7 @@ func TestAllowanceSpending(t *testing.T) {
 	// allowance.
 	for i := 0; i < 15; i++ {
 		for _, contract := range c.Contracts() {
-			ed, err := c.Editor(contract.ID, nil)
+			ed, err := c.Editor(contract.HostPublicKey, nil)
 			if err != nil {
 				continue
 			}
@@ -346,35 +253,6 @@ func TestAllowanceSpending(t *testing.T) {
 	if expectedFees.Cmp(reportedSpending.ContractFees) != 0 {
 		t.Fatalf("expected %v reported fees but was %v",
 			expectedFees.HumanString(), reportedSpending.ContractFees.HumanString())
-	}
-
-	// enter a new period. PeriodSpending should reset.
-	c.mu.Lock()
-	renewHeight := c.blockHeight + c.allowance.RenewWindow
-	blocksToMine := renewHeight - c.blockHeight
-	c.mu.Unlock()
-	for i := types.BlockHeight(0); i < blocksToMine; i++ {
-		_, err = m.AddBlock()
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Retry to give the threadedMaintenance some time to finish
-	var newReportedSpending modules.ContractorSpending
-	err = build.Retry(100, 100*time.Millisecond, func() error {
-		newReportedSpending = c.PeriodSpending()
-		if reflect.DeepEqual(newReportedSpending, reportedSpending) {
-			return errors.New("reported spending was identical after entering a renew period")
-		}
-		if newReportedSpending.Unspent.Cmp(reportedSpending.Unspent) <= 0 {
-			return fmt.Errorf("expected newReportedSpending to have more unspent: %v <= %v",
-				newReportedSpending.Unspent.HumanString(), reportedSpending.Unspent.HumanString())
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
 }
 
@@ -524,6 +402,96 @@ func TestIntegrationSetAllowance(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestLinkedContracts tests that the contractors maps are updated correctly
+// when renewing contracts
+func TestLinkedContracts(t *testing.T) {
+	if testing.Short() {
+		t.SkipNow()
+	}
+	t.Parallel()
+
+	// create testing trio
+	_, c, m, err := newTestingTrio(t.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create allowance
+	a := modules.Allowance{
+		Funds:       types.SiacoinPrecision.Mul64(100),
+		Hosts:       1,
+		Period:      20,
+		RenewWindow: 10,
+	}
+	err = c.SetAllowance(a)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for Contract creation
+	err = build.Retry(200, 100*time.Millisecond, func() error {
+		if len(c.Contracts()) != 1 {
+			return errors.New("no contract created")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Confirm that maps are empty
+	if len(c.renewedFrom) != 0 {
+		t.Fatal("renewedFrom map should be empty")
+	}
+	if len(c.renewedTo) != 0 {
+		t.Fatal("renewedTo map should be empty")
+	}
+
+	// Mine blocks to renew contract
+	for i := types.BlockHeight(0); i < c.allowance.Period-c.allowance.RenewWindow; i++ {
+		_, err = m.AddBlock()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Confirm Contracts got renewed
+	err = build.Retry(200, 100*time.Millisecond, func() error {
+		if len(c.Contracts()) != 1 {
+			return errors.New("no contract")
+		}
+		if len(c.OldContracts()) != 1 {
+			return errors.New("no old contract")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Confirm maps are updated as expected
+	if len(c.renewedFrom) != 1 {
+		t.Fatalf("renewedFrom map should have 1 entry but has %v", len(c.renewedFrom))
+	}
+	if len(c.renewedTo) != 1 {
+		t.Fatalf("renewedTo map should have 1 entry but has %v", len(c.renewedTo))
+	}
+	if c.renewedFrom[c.Contracts()[0].ID] != c.OldContracts()[0].ID {
+		t.Fatalf(`Map assignment incorrect,
+		expected:
+		map[%v:%v]
+		got:
+		%v`, c.Contracts()[0].ID, c.OldContracts()[0].ID, c.renewedFrom)
+	}
+	if c.renewedTo[c.OldContracts()[0].ID] != c.Contracts()[0].ID {
+		t.Fatalf(`Map assignment incorrect,
+		expected:
+		map[%v:%v]
+		got:
+		%v`, c.OldContracts()[0].ID, c.Contracts()[0].ID, c.renewedTo)
 	}
 }
 

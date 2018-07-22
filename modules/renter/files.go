@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/NebulousLabs/Sia/build"
-	"github.com/NebulousLabs/Sia/crypto"
-	"github.com/NebulousLabs/Sia/modules"
-	"github.com/NebulousLabs/Sia/persist"
-	"github.com/NebulousLabs/Sia/types"
+	"gitlab.com/NebulousLabs/Sia/build"
+	"gitlab.com/NebulousLabs/Sia/crypto"
+	"gitlab.com/NebulousLabs/Sia/modules"
+	"gitlab.com/NebulousLabs/Sia/persist"
+	"gitlab.com/NebulousLabs/Sia/types"
 )
 
 var (
@@ -149,10 +149,18 @@ func (f *file) redundancy(offlineMap map[types.FileContractID]bool, goodForRenew
 		build.Critical("cannot get redundancy of a file with 0 chunks")
 		return -1
 	}
-	pieceMap := make(map[string]struct{})
+	// pieceRenewMap stores each encountered piece and a boolean to indicate if
+	// that piece was already encountered on a goodForRenew contract.
+	pieceRenewMap := make(map[string]bool)
 	for _, fc := range f.contracts {
-		offline := offlineMap[fc.ID]
-		goodForRenew := goodForRenewMap[fc.ID]
+		offline, exists1 := offlineMap[fc.ID]
+		goodForRenew, exists2 := goodForRenewMap[fc.ID]
+		if exists1 != exists2 {
+			build.Critical("contract can't be in one map but not in the other")
+		}
+		if !exists1 {
+			continue
+		}
 
 		// do not count pieces from the contract if the contract is offline
 		if offline {
@@ -160,10 +168,21 @@ func (f *file) redundancy(offlineMap map[types.FileContractID]bool, goodForRenew
 		}
 		for _, p := range fc.Pieces {
 			pieceKey := fmt.Sprintf("%v/%v", p.Chunk, p.Piece)
-			if _, redundant := pieceMap[pieceKey]; redundant {
+			// If the piece is redundant we need to check if the same piece was
+			// encountered on a goodForRenew contract before. If it wasn't we
+			// need to increase the piecesPerChunk counter and set the value of
+			// the pieceKey entry to true. Otherwise we just ignore the piece.
+			if gfr, redundant := pieceRenewMap[pieceKey]; redundant && gfr {
+				continue
+			} else if redundant && !gfr {
+				pieceRenewMap[pieceKey] = true
+				piecesPerChunk[p.Chunk]++
 				continue
 			}
-			pieceMap[pieceKey] = struct{}{}
+			pieceRenewMap[pieceKey] = goodForRenew
+
+			// If the contract is goodForRenew, increment the entry in both
+			// maps. If not, only the one in piecesPerChunkNoRenew.
 			if goodForRenew {
 				piecesPerChunk[p.Chunk]++
 			}
@@ -284,14 +303,17 @@ func (r *Renter) FileList() []modules.FileInfo {
 	goodForRenew := make(map[types.FileContractID]bool)
 	offline := make(map[types.FileContractID]bool)
 	for cid := range contractIDs {
-		resolvedID := r.hostContractor.ResolveID(cid)
-		cu, ok := r.hostContractor.ContractUtility(resolvedID)
+		resolvedKey := r.hostContractor.ResolveIDToPubKey(cid)
+		cu, ok := r.hostContractor.ContractUtility(resolvedKey)
+		if !ok {
+			continue
+		}
 		goodForRenew[cid] = ok && cu.GoodForRenew
-		offline[cid] = r.hostContractor.IsOffline(resolvedID)
+		offline[cid] = r.hostContractor.IsOffline(resolvedKey)
 	}
 
 	// Build the list of FileInfos.
-	var fileList []modules.FileInfo
+	fileList := []modules.FileInfo{}
 	for _, f := range files {
 		lockID := r.mu.RLock()
 		f.mu.RLock()
@@ -301,15 +323,27 @@ func (r *Renter) FileList() []modules.FileInfo {
 		if exists {
 			localPath = tf.RepairPath
 		}
+		// Check for 0byte files
+		//
+		// TODO - once tiny files are stored in the metadata this code should be
+		// able to be cleaned up.
+		var redundancy, uploadProgress float64
+		if f.size == 0 {
+			redundancy = float64(f.erasureCode.NumPieces()) / float64(f.erasureCode.MinPieces())
+			uploadProgress = 100
+		} else {
+			redundancy = f.redundancy(offline, goodForRenew)
+			uploadProgress = f.uploadProgress()
+		}
 		fileList = append(fileList, modules.FileInfo{
 			SiaPath:        f.name,
 			LocalPath:      localPath,
 			Filesize:       f.size,
 			Renewing:       renewing,
 			Available:      f.available(offline),
-			Redundancy:     f.redundancy(offline, goodForRenew),
+			Redundancy:     redundancy,
 			UploadedBytes:  f.uploadedBytes(),
-			UploadProgress: f.uploadProgress(),
+			UploadProgress: uploadProgress,
 			Expiration:     f.expiration(),
 		})
 		f.mu.RUnlock()
@@ -323,7 +357,7 @@ func (r *Renter) FileList() []modules.FileInfo {
 func (r *Renter) File(siaPath string) (modules.FileInfo, error) {
 	var fileInfo modules.FileInfo
 
-	// Get the file and its contracs
+	// Get the file and its contracts
 	contractIDs := make(map[types.FileContractID]struct{})
 	lockID := r.mu.RLock()
 	defer r.mu.RUnlock(lockID)
@@ -342,10 +376,13 @@ func (r *Renter) File(siaPath string) (modules.FileInfo, error) {
 	goodForRenew := make(map[types.FileContractID]bool)
 	offline := make(map[types.FileContractID]bool)
 	for cid := range contractIDs {
-		resolvedID := r.hostContractor.ResolveID(cid)
-		cu, ok := r.hostContractor.ContractUtility(resolvedID)
+		resolvedKey := r.hostContractor.ResolveIDToPubKey(cid)
+		cu, ok := r.hostContractor.ContractUtility(resolvedKey)
+		if !ok {
+			continue
+		}
 		goodForRenew[cid] = ok && cu.GoodForRenew
-		offline[cid] = r.hostContractor.IsOffline(resolvedID)
+		offline[cid] = r.hostContractor.IsOffline(resolvedKey)
 	}
 
 	// Build the FileInfo
