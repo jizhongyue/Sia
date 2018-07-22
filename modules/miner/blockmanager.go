@@ -196,11 +196,17 @@ func (m *Miner) blockForWork() types.Block {
 	}}
 
 	// Add an arb-data txn to the block to create a unique merkle root.
+	// randBytes := fastrand.Bytes(types.SpecifierLen)
+	// randTxn := types.Transaction{
+	// 	ArbitraryData: [][]byte{append(modules.PrefixNonSia[:], randBytes...)},
+	// }
+	// b.Transactions = append([]types.Transaction{randTxn}, b.Transactions...)
+	// Add an arb-data txn to the block to create a unique merkle root.
 	randBytes := fastrand.Bytes(types.SpecifierLen)
 	randTxn := types.Transaction{
 		ArbitraryData: [][]byte{append(modules.PrefixNonSia[:], randBytes...)},
 	}
-	b.Transactions = append([]types.Transaction{randTxn}, b.Transactions...)
+	b.Transactions = append(b.Transactions, randTxn)
 
 	return b
 }
@@ -290,7 +296,8 @@ func (m *Miner) HeaderForWork() (types.BlockHeader, types.Target, types.BlockHei
 	// accessible outside the miner).
 	var arbData [crypto.EntropySize]byte
 	fastrand.Read(arbData[:])
-	copy(m.sourceBlock.Transactions[0].ArbitraryData[0], arbData[:])
+	txnsLen := len(m.sourceBlock.Transactions)
+	copy(m.sourceBlock.Transactions[txnsLen - 1].ArbitraryData[0], arbData[:])
 	header := m.sourceBlock.Header()
 
 	// Save the mapping from the header to its block and from the header to its
