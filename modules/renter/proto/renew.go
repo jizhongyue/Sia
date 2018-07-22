@@ -3,12 +3,12 @@ package proto
 import (
 	"net"
 
-	"github.com/NebulousLabs/Sia/crypto"
-	"github.com/NebulousLabs/Sia/encoding"
-	"github.com/NebulousLabs/Sia/modules"
-	"github.com/NebulousLabs/Sia/types"
+	"gitlab.com/NebulousLabs/Sia/crypto"
+	"gitlab.com/NebulousLabs/Sia/encoding"
+	"gitlab.com/NebulousLabs/Sia/modules"
+	"gitlab.com/NebulousLabs/Sia/types"
 
-	"github.com/NebulousLabs/errors"
+	"gitlab.com/NebulousLabs/errors"
 )
 
 // Renew negotiates a new contract for data already stored with a host, and
@@ -34,7 +34,7 @@ func (cs *ContractSet) Renew(oldContract *SafeContract, params ContractParams, t
 
 	// Calculate the anticipated transaction fee.
 	_, maxFee := tpool.FeeEstimation()
-	txnFee := maxFee.Mul64(estTxnSize)
+	txnFee := maxFee.Mul64(modules.EstimatedFileContractTransactionSetSize)
 
 	// Underflow check.
 	if funding.Cmp(host.ContractPrice.Add(txnFee).Add(basePrice)) <= 0 {
